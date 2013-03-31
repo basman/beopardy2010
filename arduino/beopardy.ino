@@ -5,19 +5,19 @@
   
   Hardware connections / pin assignments:
   
-  Button 1: pin 7,  D4
-  Button 2: pin 8,  D5
-  Button 3: pin 12, D9
-  Button 4: pin 14, D11
-  Button 5: pin 15, D12
-  Button 6: pin 16, D13
+  Button 1: pin D2
+  Button 2: pin D4
+  Button 3: pin D7
+  Button 4: pin D8
+  Button 5: pin D12
+  Button 6: pin D13 (onboard LED)
   
-  Lamp 1: pin  5, D2 (PWM capable)
-  Lamp 2: pin  6, D3 (PWM capable)
-  Lamp 3: pin  9, D6 (PWM capable)
-  Lamp 4: pin 10, D7 (PWM capable)
-  Lamp 5: pin 11, D8 (PWM capable)
-  Lamp 6: pin  3, RESET (PWM capable)
+  Lamp 1: pin  D3  (PWM capable)
+  Lamp 2: pin  D5  (PWM capable)
+  Lamp 3: pin  D6  (PWM capable)
+  Lamp 4: pin  D9  (PWM capable)
+  Lamp 5: pin  D10 (PWM capable)
+  Lamp 6: pin  D11 (PWM capable)
 
 
   TODO
@@ -29,15 +29,18 @@
 
 /* PLAYERS: maximum number of players the hardware supports
  * setting this higher than the actual number of buttons currently connected is ok.
- * setting this higher than 5 will redefine the RESET pin 3.
+ * setting this higher than 5 will redefine the onboard LED
  * maximum setting is 6 for the Arduino nano v3.0.
  */
-#define PLAYERS 4
+#define PLAYERS 5
+
+int buttonPins[] = { 2, 4, 7, 8, 12, 13 };
+int lampPins[]   = { 3, 5, 6, 9, 10, 11 };
 
 /* BUTTON_PUSHED: the TTL level on digital pins while a button is pushed
- * depends on the circuit connecting the buttons to the digital I/O pins (true or false)
+ * depends on the circuitry that connects the buttons to the digital I/O pins (true or false)
  */
-#define BUTTON_PUSHED true
+#define BUTTON_PUSHED LOW
 
 // DEBOUNCE_COUNT: how many consecutive reads until a button is considered to be pressed
 #define DEBOUNCE_COUNT 8
@@ -47,25 +50,29 @@
 #error invalid numbers of \PLAYERS: PLAYERS
 #endif
 
+#if PLAYERS < 6
 int ledPin = 13; // indicator for "button has been pushed"
+#endif
 
-int buttonPins[] = { 7, 8, 12, 14, 15, 16 };
-int lampPins[]   = { 5, 6,  9, 10, 11,  3 };
-
-boolean asyncMode = true;      // sync mode: PC polls board for buttons; async mode: board sends buttons anytime
+bool asyncMode = true;      // sync mode: PC polls board for buttons; async mode: board sends buttons anytime
 int button = 0;                // indicates which button was pressed first, or zero if no button pressed yet
 int debounceCounters[PLAYERS]; // debounce counters for each button
 
 void setup() {
   // create serial object
   Serial.begin(9600);
-  
+
+#if PLAYERS < 6
   // set pin modes
   pinMode(ledPin, OUTPUT);
+#endif
   
   for(int i=0; i<PLAYERS; i++) {
       pinMode(buttonPins[i], INPUT);
+      // activate pull-up resistors
+      digitalWrite(buttonPins[i], HIGH);
       pinMode(lampPins[i], OUTPUT);
+      digitalWrite(lampPins[i], LOW);
   }
 }
 
@@ -89,9 +96,22 @@ int bitmask2button(int bitmask) {
   return 0;
 }
 
+void activateLamp(int index) {
+  resetLamps();
+  digitalWrite(lampPins[index], HIGH);
+}
+
+void resetLamps() {
+  for(int i=0; i<PLAYERS; i++) {
+    digitalWrite(lampPins[i], LOW);
+  }
+}
+
 void resetBoard() {
-    // TODO reset lamps
+    resetLamps();
+#if PLAYERS < 6
     digitalWrite(ledPin, LOW);
+#endif
     button = 0;
 }
 
@@ -103,8 +123,10 @@ int scanButtons() {
             debounceCounters[i]++;
             if(debounceCounters[i] >= DEBOUNCE_COUNT) {
                 button = i+1;
-// TODO activate the lamp and switch off all others
+                activateLamp(i);
+#if PLAYERS < 6
                 digitalWrite(ledPin, HIGH);
+#endif
                 return button;
             }
         } else {
