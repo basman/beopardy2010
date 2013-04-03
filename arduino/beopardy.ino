@@ -57,6 +57,7 @@ int ledPin = 13; // indicator for "button has been pushed"
 bool asyncMode = true;      // sync mode: PC polls board for buttons; async mode: board sends buttons anytime
 int button = 0;                // indicates which button was pressed first, or zero if no button pressed yet
 int debounceCounters[PLAYERS]; // debounce counters for each button
+int suppressedButtons;     // bitmask that indicates suppressed buttons (player gave wrong answer)
 
 void setup() {
   // create serial object
@@ -109,16 +110,25 @@ void resetLamps() {
 
 void resetBoard() {
     resetLamps();
+    suppressedButtons = 0;
 #if PLAYERS < 6
     digitalWrite(ledPin, LOW);
 #endif
     button = 0;
 }
 
+void suppressButton(int button_nr) {
+    suppressedButton |= 1<<(buttone_nr-1); 
+}
+
 // single scan sweep over all buttons with debouncing
 // this function shall be called from a loop, so consecutive reads on button pins make it through debouncing
 int scanButtons() {
     for(int i=0; i<PLAYERS; i++) {
+      
+        if(suppressedButtons & 1<<i != 0)
+            continue;
+      
         if(digitalRead(buttonPins[i]) == BUTTON_PUSHED) {
             debounceCounters[i]++;
             if(debounceCounters[i] >= DEBOUNCE_COUNT) {
@@ -149,10 +159,7 @@ void receiveCommand() {
     asyncMode = false;
     Serial.println("S");
     
-  } else if (cmd == 'Q') {  // poll in sync mode
-    if(asyncMode)
-      Serial.println("?"); // no polling in async mode
-    else
+  } else if (cmd == 'Q' && !asyncMode) {  // poll in sync mode
       Serial.println(button);
       
   } else if(cmd == 'R') {  // reset board (async mode)
@@ -165,6 +172,11 @@ void receiveCommand() {
       // indicate currently pressed button (only one with lowest index)
       Serial.println(bitmask2button(curButtons));
     }
+    
+  } else if(cmd == 'F' && button != 0) { // answer was incorrect (only valid if button!=0)
+    suppressButton(button);
+    Serial.println("A");
+    
   } else {
     // indicate invalid or unknown command
     Serial.println("?");
@@ -173,7 +185,9 @@ void receiveCommand() {
 }
 
 void loop() {
-  // wait for serial input
+  // TODO blink buttons that are still in the game
+  
+  // watch out for serial input
   if(Serial.available() != 0) {
      receiveCommand(); 
   }
