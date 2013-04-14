@@ -1,0 +1,1386 @@
+#!/usr/bin/perl -w
+
+# vim:set ts=4 sw=4 cin sm:
+
+# This code is under the BSD Licence
+# (c) by Stefan `Sec` Zehl <sec@42.org>
+
+use constant beopardy =>
+	q$Id: beopardy,v 1.16 2006/12/23 16:09:21 sec Exp sec $;
+
+use strict;
+use Tk;
+use Tk::X11Font;
+use Tk::Dialog;
+use Socket;
+use FileHandle;
+use Getopt::Std;
+use IO::Handle;
+use Encode;
+
+# Global options. Set via getopt.
+my $debug=0;
+my $override=0;					# Ignore windowmanager?
+my $force=0;					# move focus for kbd-mode?
+my $tty=0;						# use tty/serial input?
+my $splash=0;					# Display a splashscreen?
+my $soundd=0;					# Use Soundd-output?
+my $mood=0;						# Publish mood?
+my $socket=0;					# tty emulated by tcp socket?
+my $geometry=0;					# How big should I be?
+my $readfile;					# Should I read from a file?
+my $savefile=0;					# Should I save to a file?
+
+my $global_question_inhibit=0;
+
+my $global_is_dbl=0;
+my $global_dbl_maxamt=0;
+my $global_dbl_amt=0;
+my $global_dbl_ply=0;
+
+# L10n
+my %ln = (
+		"Richtig"			=> "right",
+		"Falsch"			=> "wrong",
+		"Oops"				=> "oops",
+		"ist etwas unruhig"	=> "seems a bit nervous",
+		"Knopf loesen"		=> "release your button",
+		"nochmal"			=> "try again",
+		"Zuhören..."		=> "listen...",
+		);
+
+sub _ {
+	my $key=shift;
+
+	return $key; # Deutsch-Mode.
+
+	if (defined ($ln{$key})){
+		return $ln{$key};
+	}else{
+		return $key;
+	};
+};
+
+my %opt;
+getopts('ydoftsg:r:hwbm', \%opt);
+
+# Possible screen sizes
+my %screen=( 320 => 200,
+			 640 => 480,
+		     800 => 600, 
+			1024 => 786);
+
+my @beopardy = split(/ /,beopardy);
+
+if (defined $opt{h}){
+	print <<EOF;
+This is Beopardy $beopardy[2] $beopardy[3].
+
+beopardy -options Gamefile Player1 Player2 ...
+
+-h		This help.
+-d		Debug mode. Print lots'o stuff.
+-o		Override. Ignore Windowmanager. (fullscreen)
+-f		Force keyboard focus.           (fullscreen)
+-t		Tty input. Use when Buzzers are connected.
+-s		Socket. Emulate Tty input via tcp socket (port 3333)
+-b		Beopardy splashscreen. Default for serial input.
+-r <file>	Read saved game from File.
+-w		Save game progress for reading with -r.
+-y		Contact soundd at localhost 32001
+-m		Moodlamp support. Works via soundd (requires -y)
+-g <size>	geometry. Select window size.
+		0: fullscreen (default)
+EOF
+	my $x=1;
+	foreach (sort {$a <=> $b } keys %screen){
+		printf "\t\t%1d: %4dx%4d\n",$x++,$_,$screen{$_};
+	}
+	print "";
+	exit(42);
+}
+
+$debug=1	if (defined $opt{d});
+$override=1	if (defined $opt{o});
+$force=1	if (defined $opt{f});
+$tty=1		if (defined $opt{t});
+$socket=1	if (defined $opt{s});
+$savefile=1	if (defined $opt{w});
+$splash=1	if (defined $opt{b});
+$soundd=1	if (defined $opt{y});
+$mood=1		if (defined $opt{m});
+
+if($mood && !$soundd){
+	die "Mood support requires soundd!";
+};
+
+if($opt{r}){ # Read savefile
+	if ( -f $opt{r} ){
+		$readfile=$opt{r};
+	};
+};
+
+if ($socket){$tty=1};	# socket emulates tty.
+if ($tty){$splash=1};	# tty requires splash.
+
+my $tl = MainWindow -> new -> toplevel;
+$tl->appname(beopardy);
+$tl->bind('<M>',sub{ snd_play("start"); });
+my ($width,$height)=($tl->screenwidth,$tl->screenheight);	# Size of game field.
+
+if (defined $opt{g}){
+	if ($opt{g} =~ /^(\d+)[x*](\d+)$/){
+		($width,$height)=($1,$2);
+	} elsif ( defined $screen{$opt{g}}){
+		($width,$height)=($opt{g},$screen{$opt{g}});
+	}else{
+		my @x = (sort {$a<=>$b} keys %screen);
+		if ((--$opt{g}<=$#x) && ($opt{g}>=0 )){
+			$width=$x[$opt{g}];
+			$height=$screen{$width};
+		};
+	};
+}
+
+my $q=5;						# Wieviele Fragen/Kategorie?
+my $qwidth=35;					# Width of a question.
+my $catwidth =10;				# Width of categories.
+my $namewidth=10;				# Width of player names
+
+if ($tty){
+	print "Opening tty\n";
+	if($socket){
+		my $port = 3333;
+		my $proto = getprotobyname('tcp');
+		socket(Server, PF_INET, SOCK_STREAM, $proto)	|| die "socket: $!";
+		setsockopt(Server, SOL_SOCKET, SO_REUSEADDR, pack("l", 1))
+														|| die "setsockopt: $!";
+		bind(Server, sockaddr_in($port, INADDR_ANY))	|| die "bind: $!" ;
+		listen(Server,SOMAXCONN)						|| die "listen: $!";
+		print "Now connect to port $port...\n";
+		my $paddr = accept(Client,Server);
+		my($iport,$iaddr) = sockaddr_in($paddr);
+		my $name = gethostbyaddr($iaddr,AF_INET);
+		print "connection from $name [", inet_ntoa($iaddr), "] at port $iport\n";
+	}else{
+		# Be sure to set device to -crtscts 19200
+		open(Client,"+>/dev/ttyS0") || die "open: $!";
+		use IO::Stty;
+#		IO::Stty::stty(\*Client,"-crtscts");
+		IO::Stty::stty(\*Client,"19200");
+		IO::Stty::stty(\*Client,"-echo");
+		IO::Stty::stty(\*Client,"-icrnl");
+	};
+	print "done.\n";
+	autoflush Client;
+};
+
+my $snd_save; # resume sound..
+if($soundd){
+		my $port = 32001;
+		my $proto = getprotobyname('tcp');
+		socket(Soundd, PF_INET, SOCK_STREAM, $proto)	|| die "socket: $!";
+
+		my $iaddr   = inet_aton("localhost");
+		my $paddr   = sockaddr_in($port, $iaddr);
+		$proto   = getprotobyname('tcp');
+		connect(Soundd, $paddr)							|| die "connect: $!";
+		autoflush Soundd;
+};
+&snd_stop(0); # Just to make sure, and to install snd_eat.
+&mood("boot");
+
+print "Reading questions....\n";
+my %jdata;
+open (J,"<Jeopardy") || die;
+my ($nam,$c);
+while (<J>){
+	chomp;
+	next if ((!defined $nam) && (!/^>/));
+	next if /^\s*(#|$)/;
+	if (/^>(.*)/){
+		if(defined $nam){
+			printf "%-20s:%2d\n",$nam,$c if ($debug);
+		};
+		$nam=$1;
+		$c=0;
+		next;
+	}
+	$_.=" ";
+	if (!s/(?<!\\)\\n/\n/g){
+		s/(.{10,$qwidth})\s+/$1\n/mg;
+	};
+	s/\\\\/\\/mg;
+	$jdata{$nam}[++$c]=$_;
+};
+close(J);
+printf "%-20s:%2d\n",$nam,$c if ($debug);
+
+print "Totalling ",(scalar keys %jdata)," categories.\n";
+
+sub logname{
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
+	$year+=1900;$mon++;
+	return (sprintf "%04d%02d%02d.%02d%02d",$year,$mon,$mday,$hour,$min);
+}
+
+sub read_game{
+	my @Cat;			# Namen der Kategorien
+	my $q=shift;		# Wieviele Fragen/Kategorie?
+	my $gamefile=shift(@ARGV)||"Test.jg";
+	$gamefile .= ".jg" if ( -f $gamefile.".jg" );
+	$gamefile =~ /^([^.]+)(.jg)?/;
+	my $title=$1;		# Titel des Spielfelds.
+
+	print "\nReading game '$title' ...\n";
+	open(G,"<$gamefile") || die;
+	while (<G>){
+		chomp;
+		next if (/^\s*(#|$)/);
+		push @Cat,$_;
+	};
+	close(G);
+
+	my $p=0;
+	for (@Cat){
+		printf "%-20s:%2d\n",$_,$#{$jdata{$_}} if ($debug);
+		if ($#{$jdata{$_}} < $q){
+			print "ERROR: not enough questions in \"$_\"\n";
+			$p++;
+		};
+		if ($#{$jdata{$_}} > $q){
+			print "WARN : too many questions in \"$_\"\n";
+#			$p++;
+		};
+	};
+	if ($p){
+		print "Hit enter to continue...\n";
+		$p=<STDIN>;
+	};
+
+	if($savefile){
+		my($ts)=logname();
+		open(SAV,">$gamefile.$ts");
+		select(SAV);$|=1;
+		select(STDOUT);
+	}else{
+		open(SAV,">-");
+	};
+
+	return $title,@Cat;
+};
+
+# Titel und Fragen
+my ($title,@Cat)=&read_game($q);
+
+my @players;
+if ($#ARGV>0){
+	@players=@ARGV;
+}else{
+	@players=qw(Foo Bar Baz);
+};
+
+
+my @colors=qw(darkgrey darkred darkgreen darkblue darkcyan yellow);
+
+unshift @players,"Nobody";
+my @points;
+
+# Here starts the Tk part...
+#my $qfont=$tl->X11Font('-*-new century schoolbook-medium-r-*--40-*-*-*-*-*-iso8859-1');
+#my $qfont=$tl->X11Font('-monotype-arial-medium-r-*-*-50-*-*-*-*-*-iso8859-*');
+my $qfont=$tl->X11Font('-*-freesans-medium-r-*-*-50-*-*-*-*-*-iso8859-*');
+print "Question-Font:\n$qfont\n" if ($debug);
+
+#my $tfont=$tl->X11Font('-*-helvetica-medium-r-*--30-*-*-*-*-*-iso8859-1');
+#my $tfont=$tl->X11Font('-bitstream-*-medium-r-*-*-45-*-*-*-*-*-iso8859-1');
+my $tfont=$tl->X11Font('-*-freesans-medium-r-*-*-40-*-*-*-*-*-iso8859-*');
+print "Title-Font:\n$tfont\n" if($debug);
+
+#my $sfont=$tl->X11Font('-*-freemono-medium-r-*-*-10-*-*-*-*-*-iso8859-*');
+my $sfont=$tl->X11Font('-*-freesans-medium-r-*-*-20-*-*-*-*-*-iso8859-*');
+print "Small-Font:\n$sfont\n" if($debug);
+
+my $fixedfont=$tl->X11Font('-*-freemono-medium-r-*-*-*-*-*-*-*-*-iso8859-*');
+print "Fixed-Font:\n$fixedfont\n" if($debug);
+
+my $utf8font=$tl->X11Font('-*-freemono-medium-r-*-*-*-*-*-*-*-*-iso8859-*');
+print "UTF8-Font:\n$utf8font\n" if($debug);
+
+unless ($qfont and $tfont and  $sfont ){
+	die "One or more fonts failed.\n";
+};
+
+$tl->configure(-height => $height, -width => $width);
+$tl->resizable(0,0);
+$tl->packPropagate(0);	# Keep the size.
+$tl->overrideredirect(1) if ($override);
+#$tl->fullscreen(1) if ($override);
+#$tl->attributes(-topmost => 'yes') if ($override);
+#$tl->highlightthickness(0) if ($override);
+#$tl->grabGlobal() if ($override);
+
+
+# Title of Gamefield
+my $tlabel = $tl -> Label (
+		-text	=> $title,
+		-relief => 'ridge',
+		-font	=> $tfont,
+) -> pack(-fill	=> 'x');
+
+$tl->eventAdd('<<quit>>'=>'<Button-3>');
+$tl->eventAdd('<<quit>>'=>'<Q>');
+$tl->bind('<<quit>>',sub{&snd_stop();print "Done:\n",map {sprintf "%10s:%5d\n",$players[$_],$points[$_]} sort {$points[$b]<=>$points[$a]} (1..$#points);exit});
+#$tl->bind('<Button-2>',sub{$tl->focus;$tl->focusForce;$buttons[1][1]->focus};);
+$tl->bind('<Z>',sub{&snd_zap()});
+
+# Game-Buttons.
+my $bframe=$tl->Frame->pack(-fill=>'both',-expand=>1);
+my @button;	# The TkButtons 
+my @pts;	# Who got points from this question?
+my @log;	# Pointslog
+my @frame;  # The TkFrames, one per category.
+my @mframe; # A frame per button to avoid stupid resizing.
+for my $cat (0..$#Cat){
+	$frame[$cat]=$bframe->Frame(
+			-width => 1,
+			-height => 1,
+	)->pack(
+			-side	=>'left',
+			-fill	=>'both',
+			-expand	=> 1,
+	);
+	$frame[$cat]->packPropagate(0);
+
+	$button[$cat][0] = $frame[$cat]->Label(
+			-width	=> $catwidth,
+			-text	=> $Cat[$cat],
+			-font	=> $sfont,
+	)->pack(-fill	=> 'both');
+
+	for my $q (1..$q) {
+		$mframe[$cat][$q] = $frame[$cat]->Frame(
+#				height => 1
+				)-> pack( -fill => 'both', -expand => 1);
+		$mframe[$cat][$q]->packPropagate(0);
+		$button[$cat][$q] = $mframe[$cat][$q]->Button(
+				-text		=> "${q}00",
+				-command	=> [\&selectQuest,$tl,$cat,$q],
+				-font		=> $tfont,
+				-highlightcolor => "red",
+		)->pack( -fill => 'both', -expand => 1);
+		$button[$cat][$q]->bind('<h>',[\&moveCrsr,$cat-1,$q  ]);
+		$button[$cat][$q]->bind('<j>',[\&moveCrsr,$cat  ,$q+1]);
+		$button[$cat][$q]->bind('<k>',[\&moveCrsr,$cat  ,$q-1]);
+		$button[$cat][$q]->bind('<l>',[\&moveCrsr,$cat+1,$q  ]);
+		$button[$cat][$q]->bind('<E>',[\&edit_pts,$cat  ,$q  ]);
+		$button[$cat][$q]->bind('<F>',[\&finish]);
+		$button[$cat][$q]->bind('<R>',[\&randomply]);
+		$button[$cat][$q]->bind('<r>',[\&random_ray]);
+#		$button[$cat][$q]->bind('<FocusIn>',sub{
+#				$button[$cat][$q]->configure(-border=>10)});
+#		$button[$cat][$q]->bind('<FocusOut>',sub{
+#				$button[$cat][$q]->configure(-border=>2)});
+# Fuer mh, der die VI-Keys nicht mag...
+		$button[$cat][$q]->bind('<Left>' ,[\&moveCrsr,$cat-1,$q  ]);
+		$button[$cat][$q]->bind('<Down>' ,[\&moveCrsr,$cat  ,$q+1]);
+		$button[$cat][$q]->bind('<Up>'   ,[\&moveCrsr,$cat  ,$q-1]);
+		$button[$cat][$q]->bind('<Right>',[\&moveCrsr,$cat+1,$q  ]);
+	};
+};
+$button[0][1]->focus;
+#$button[0][1]->focusForce if ($force);
+
+@points=(0)x(4);
+if($#players>3){
+	@points=(0)x($#players+1);
+};
+sub scoreboard(){ # Scoreboard.
+my $sframe=$tl->Frame->pack(-side=>'top',-fill=>'x');
+my @pborder;
+my @pframes;
+my @pnames;
+my @pscores;
+
+for (1..$#players){
+	if ($_ == $#players){
+		$pborder[$_]=$sframe;
+	}else{
+		$pborder[$_]=$sframe->Frame->pack(
+				-side	=>'left',
+				-fill	=>'x',
+				-expand	=>1,
+		);
+	};
+
+	$pframes[$_]=$pborder[$_]->Label( -relief=>'ridge')->pack( -side=>'left');
+	$pnames[$_] =$pframes[$_]->Label(
+			-width		=>$namewidth,
+			-font		=> $sfont,
+			-anchor		=>'w',
+			-textvar	=> \$players[$_],
+			-background	=> $colors[$_],
+			-foreground	=> "white",
+	)->pack;
+	$pscores[$_]=$pframes[$_]->Label(
+			-textvar	=> \$points[$_],
+			-font		=> $sfont,
+			-anchor		=>'e',
+	)->pack(-fill=>'x');
+};
+print SAV "[ply] ",join("/",@players),"\n";
+return $sframe;
+};
+
+#print "Board done.\n";
+
+if(defined $readfile){
+	my($c,$f,$sgn,$ply);
+	print "Reading Savegame...\n";
+	open(RSAV,$readfile) || die "Savegame error: $!";
+	while(<RSAV>){
+		if (/^\[ply\]/){
+			(undef,$ply)=split;
+			@players=split(/\//,$ply);
+#			unshift @players,"Nobody";
+			next;
+		};
+		if(/^\[DBL\] (-?\d+)/){
+			$global_dbl_amt=$1;
+			$global_is_dbl=1;
+		};
+		next if(! /^\[sav\]/);
+		(undef,$c,$f,$sgn,$ply)=split;
+		print "$c - $f - $sgn - $ply\n";
+		updPlayfield($c,$f,$ply,$sgn);
+	};
+	close(RSAV);
+};
+
+my $sframe=scoreboard();
+
+print "\nGame start.\n\n";
+
+my @elist;
+my $dlgbtn;
+
+my $splash_frame;
+$tl->waitVisibility; # To fix stacking order
+
+
+if($splash){ # Splash-Screen
+	my $dlg=$tl->Toplevel;
+	my $i;
+	my $rframe;
+
+#	$dlg->configure(-height => $height, -width => $width);
+#	$dlg->resizable(0,0);
+#	$dlg->packPropagate(0);	# Keep the size.
+	$dlg->overrideredirect(1);
+	my $q=$dlg->Label(qw/-relief raised -width 80/)->pack;
+
+	$dlg->bind('<M>',sub{
+	snd_play("start");
+			});
+	$i= $q->Pixmap("beopardy",-file => "img/beopardy.xpm");
+
+	if(defined($i)){
+		$q->Label(-image=>"beopardy")->pack(-side=>"top");
+	};
+
+	$rframe=$q->Frame->pack(-fill=>'both',-expand=>1);
+
+	my $f = $rframe;
+	$splash_frame=$f;
+	my $row=0;
+	foreach (1..$#players) {
+#		my $e = $f->Entry(qw/-relief sunken -width 40/);
+		my $e = $f->Entry(-relief	=> "sunken",
+						-font	=> $sfont,
+			   			-width	=> 30);
+		$e->insert(0,$players[$_]);
+		if($tty){
+			$e->bind('<Return>',[\&ser_reset,\&ser_PlyEn]);
+		}else{
+			$e->bind('<Return>',[\&ply_focus,$_+1]);
+		};
+		$e->bind('<FocusOut>',[\&set_ply,$_]);
+
+		my $l = $f->Label(-text => "Player $_", 
+			-width		=> $namewidth,
+			-background	=> $colors[$_],
+			-foreground	=> "white",
+			-font		=> $sfont,
+			-anchor 	=> 'e', -justify => 'right');
+		Tk::grid( $l, -row => $row, -column => 0, -sticky => 'e');
+		Tk::grid( $e, -row => $row++, -column => 1,-sticky => 'ew');
+		$f->gridRowconfigure(1,-weight => 1);  
+		$elist[$_]=$e;
+	}
+	$dlgbtn=$q->Button(
+			-text	=> "Start",
+			-font	=> $qfont,
+#			-width	=> 30,
+			-height	=> 2,
+			-command	=> sub {$splash=0;&snd_stop;&ser_reset if($tty);$button[0][1]->focus; $button[0][1]->focusForce if ($force);&mood("start");$dlg->destroy;
+			print SAV "[ply] ",join("/",@players),"\n";
+			},
+	)->pack(
+			-fill	=>'x',
+			-expand	=>1,
+	);
+
+	if($tty){
+		&ser_PlyEn;
+	}else{
+		&ply_focus(".",1);
+	};
+
+	$dlg->idletasks;
+	$dlg->geometry(sprintf "+%d+%d",($dlg->screenwidth-$dlg->width)/2,($dlg->screenheight-$dlg->height)/2);
+
+	$dlg->raise;
+	$dlg->grab;
+	$dlg->focusForce;
+	$tl->lower($dlg);
+};
+
+sub set_ply {
+	my ($crap,$key)=@_;
+	print "set_ply $key\n" if($debug);
+	$players[$key]=$crap->get;
+};
+
+sub ser_PlyEn {
+	if($tty){
+		$tl->fileevent(\*Client,'readable',[\&ser_SelectPly,@_]);
+		$dlgbtn->focus;
+		$dlgbtn->focusForce;
+	}else{
+		die "ser_en: $_[0]\n";
+	};
+	&mood("setup 0");
+};
+
+sub ply_focus {
+	my ($crap, $key)=@_;
+	&mood("setup $key");
+	if ($key>$#players){
+		if($tty && ($key==($#players+1))){
+			my $f=$splash_frame;
+			my $row=$key-1;
+			$players[$key]="New Player $key";
+			$points[$key]=0;
+			my $e = $f->Entry(-relief	=> "sunken",
+						-font	=> $sfont,
+			   			-width	=> 30);
+			$e->insert(0,$players[$key]);
+			$e->bind('<Return>',[\&ser_reset,\&ser_PlyEn]);
+			$e->bind('<FocusOut>',[\&set_ply,$key]);
+
+			my $l = $f->Label(-text => "Player $key", 
+					-width		=> $namewidth,
+					-font		=> $sfont,
+					-background	=> $colors[$key],
+					-foreground	=> "white",
+					-anchor 	=> 'e', -justify => 'right');
+			Tk::grid( $l, -row => $row, -column => 0, -sticky => 'e');
+			Tk::grid( $e, -row => $row++, -column => 1,-sticky => 'ew');
+			$f->gridRowconfigure(1,-weight => 1);  
+			$elist[$key]=$e;
+			$elist[$key]->focus;
+			$elist[$key]->selectionRange(0,'end');
+			$sframe->destroy;
+			$sframe=scoreboard();
+			$sframe->idletasks;
+			return;
+		};
+		$dlgbtn->focus;
+#		$dlgbtn->focusForce if($force);
+	}else{
+		$elist[$key]->focus;
+		$elist[$key]->selectionRange(0,'end');
+	};
+};
+
+sub ser_SelectPly {
+	my ($crap)=@_;
+
+	my $key=<Client>;
+	print "SER<: <$key>\n" if($debug);
+	$key=~s/\r?\n$//;
+	$key=$key+0;
+	if($key == 0){
+		&ser_reset;
+	}else{
+		&ply_focus(".",$key);
+		&ser_dis;
+	};
+};
+
+# Make the 'resetting' window...
+my $reset=$tl->Toplevel;
+$reset->overrideredirect(1);
+$reset->resizable(0,0);
+$reset->geometry("-0+0");
+$reset->withdraw;
+$reset->Label(-text=>"resetting",-background=>"green")->pack;
+
+$tl->after(100,\&ser_reset) if($tty);
+
+MainLoop;
+
+# We selected a question...
+
+my %imgcache;
+
+sub selectQuest{
+	my ($otl,$c,$f)=@_;
+	print "global_question_inhibit= $global_question_inhibit\n";
+	return if $global_question_inhibit;
+	print "Q$f / \"$Cat[$c]\":\n$jdata{$Cat[$c]}[$f]\n";
+
+	if( $jdata{$Cat[$c]}[$f] =~ s/\s*\[dbl\]\s*// && $global_is_dbl == 0){
+		$global_is_dbl=1;
+		&enterdbl;
+		return;
+	};
+	if($global_is_dbl == 1){
+		$_[3]->destroy;
+	};
+
+	my $tl = $otl->Toplevel;
+	$tl->fileevent(\*Client,'readable',"");
+	$tl->configure(-height => $height, -width => $width);
+	if(!$override){ # XXX my windowmanager is broken %)
+		$tl->geometry("+".($otl->rootx-28)."+".($otl->rooty-9));
+	};
+	$tl->resizable(0,0);
+	$tl->packPropagate(0);	# Keep the size.
+	$tl->overrideredirect(1) if($override);
+	$tl->grab;
+
+	my $tlabel = $tl->Label(
+			-text	=> $Cat[$c],
+			-relief	=> 'ridge',
+			-font	=> $tfont,
+	) -> pack(-fill	=> 'x');
+
+# XXX Pixmap-Hack. *funfunfun*
+
+	my ($typ,$fnam);
+	$typ="";
+	print $jdata{$Cat[$c]}[$f]," <-\n" if($debug);
+	if ($jdata{$Cat[$c]}[$f] =~ /^\[(img|snd):(.*?)\]\s*/){
+#		print "JA\n";
+		$typ=$1;$fnam=$2;
+		print "This is of $typ - \'$2\'\n";
+		if($typ eq "img"){
+			if(!defined($imgcache{$fnam})){
+				if(-f "img/".$fnam.".xpm"){
+					$imgcache{$fnam} = $tl->Pixmap($fnam,-file => "img/".$fnam.".xpm");
+				}else{
+					print "img/".$fnam.".xpm not found\n";
+				};
+			};
+		};
+	}
+	if ($typ ne "snd"){
+		&snd_play("think",1);
+	};
+
+	$snd_save=undef;
+	my $question;
+	if (defined($fnam) && defined($imgcache{$fnam})){
+		$question = $tl->Label(
+			-image	=> "$fnam",
+		);
+	}else{
+		my $txt=$jdata{$Cat[$c]}[$f];
+		my $magicfont=$qfont;
+	if ($txt =~ s/^\[fixed\]//){
+		$magicfont=$fixedfont;
+	};
+	if ($txt =~ s/^\[utf8\]//){
+		$txt=Encode::decode_utf8($txt);
+	};
+		if(defined($fnam)&&($typ eq "snd")){
+			if(!$soundd){$txt.="\n[ERR:Nosound]"};
+			&snd_play($fnam);
+			$snd_save=$fnam;
+		};
+		if($txt=~s/^\[snd:.*?\]\s*//){
+			if(!$txt){
+				$txt=_("Zuhören...");
+			};
+		};
+		if($txt=~s/^\[img:.*?\]\s*//){
+			if(!$txt){
+				$txt=_("[ERR:Noimg]");
+			};
+		};
+		$question = $tl->Label(
+			-text	=> $txt,
+			-font	=> $magicfont,
+			-justify	=> "left",
+		);
+	};
+
+	$question->pack(
+			-fill	=>'both',
+			-expand	=>1
+	);
+
+	$tl->focusForce if ($force);
+
+	$tl->bind('<S>',sub{&snd_stop()});
+	$tl->bind('<R>',sub{&snd_resume()});
+	$tl->bind('<Key>',[\&answerQuest,$c,$f,Ev('A')]);
+
+	$tl->waitVisibility; # To fix stacking order
+	&mood("question");
+	if($global_is_dbl){
+		$tl->afterIdle(sub {&ser_answerQuest($tl,$c,$f) if ($tty);});
+	}else{
+		$tl->afterIdle(sub {&ser_en($tl,$c,$f) if ($tty);}); # fix Bug#2
+	};
+};
+
+my @cur_ser_answer=undef;
+
+sub ser_answerQuest {
+	my ($crap,$c,$f)=@_;
+
+	my $key;
+	if($global_is_dbl==1){
+		$key=$global_dbl_ply;
+	}else{
+		$key=<Client>;
+	};
+	&mood("player $key");
+	print "SER<: <$key>\n" if($debug);
+
+	&snd_stop if($snd_save);
+
+	$key=~s/\r?\n$//;
+
+	my $ich=$crap->Toplevel;
+
+	$ich->overrideredirect(1) if($override);
+	$ich->resizable(0,0);
+	$ich->geometry("-0-0");
+
+
+	my $ftl = $ich->Frame( -relief => 'ridge', -bd => 4)->pack;
+	$cur_ser_answer[0]=$ftl->Label(
+			-text	=> $players[$key],
+			-font	=> $qfont,
+	)->pack(
+			-fill	=>'x',
+			-expand	=> 1,
+	);
+	
+	my $bframe=$ftl->Frame->pack(-fill=>'both',-expand=>1);
+
+	my $br=$bframe->Button(
+			-text		=> _('Richtig'),
+			-command	=> sub{
+							&snd_stop;
+							&answerQuest($crap,$c,$f,$key)
+							},
+	)->pack(-side	=>'left');
+	my $bf=$bframe->Button(
+			-text		=> _('Falsch'),
+			-command	=> sub{
+							$ich->destroy;
+							&answerQuest($crap,$c,$f,-$key);
+							&snd_resume;
+							$crap->focusForce if ($force);
+							&ser_en($crap,$c,$f)},
+	)->pack(-side	=>'left');
+	my $bo=$bframe->Button(
+			-text		=> _('Oops'),
+			-command	=> sub{$ich->destroy;
+							  &ser_reset;
+#							  &snd_stop;
+							  &mood("question");
+							  &snd_resume;
+							  $crap->focusForce if ($force);
+							  &ser_en($crap,$c,$f)},
+	)->pack;
+#	$ich->bind('<q>',sub{$ich->destroy; &ser_reset; &ser_en($crap,$c,$f)});
+#	$ich->bind('<o>',sub{$ich->destroy; &ser_reset; &ser_en($crap,$c,$f)});
+#	$ich->bind('<r>',[\&answerQuest,$crap,$c,$f,$key]);
+#	$ich->bind('<f>',sub{$ich->destroy;&answerQuest($crap,$c,$f,-$key);&ser_en($crap,$c,$f)});
+
+	$br->bind('<l>',sub{$bf->focus});
+	$bf->bind('<l>',sub{$bo->focus});
+	$bo->bind('<l>',sub{$br->focus});
+	$br->bind('<h>',sub{$bo->focus});
+	$bf->bind('<h>',sub{$br->focus});
+	$bo->bind('<h>',sub{$bf->focus});
+# mh ist auch hier faul :)
+	$br->bind('<Right>',sub{$bf->focus});
+	$bf->bind('<Right>',sub{$bo->focus});
+	$bo->bind('<Right>',sub{$br->focus});
+	$br->bind('<Left>' ,sub{$bo->focus});
+	$bf->bind('<Left>' ,sub{$br->focus});
+	$bo->bind('<Left>' ,sub{$bf->focus});
+
+	$br->focusForce if($force);
+
+#	print "ser_answer done\n";
+};
+
+sub ser_en{
+	$tl->fileevent(\*Client,'readable',[\&ser_answerQuest,@_]);
+};
+sub ser_dis{
+	$tl->fileevent(\*Client,'readable',[\&ser_noinp]);
+};
+
+sub mood{
+	return if (!$soundd);
+	my($sound)=(shift);
+	print Soundd "M $sound\r\n";
+	Soundd->flush();
+};
+sub snd_play{
+	return if (!$soundd);
+	my($sound,$what)=(shift,shift);
+	print Soundd "P $sound\r\n";
+	Soundd->flush();
+	if($what){
+		$tl->fileevent(\*Soundd,'readable',[\&snd_color]); # DWIM!
+	}else{
+		$tl->fileevent(\*Soundd,'readable',[\&snd_eat]);
+	};
+};
+sub snd_stop{
+	return if (!$soundd);
+	print Soundd "Stop\r\n";
+	Soundd->flush();
+	$tl->fileevent(\*Soundd,'readable',[\&snd_eat]);
+};
+sub snd_zap{
+	return if (!$soundd);
+	print Soundd "Z\r\n";
+	Soundd->flush();
+	$tl->fileevent(\*Soundd,'readable',[\&snd_eat]);
+};
+
+sub snd_resume{
+	return if (!$soundd);
+	if($snd_save){
+		print Soundd "P $snd_save\r\n";
+		Soundd->flush();
+	};
+	$tl->fileevent(\*Soundd,'readable',[\&snd_eat]);
+};
+
+# User answered the Question.
+sub answerQuest{
+	my ($crap,$c,$f,$key)=@_;
+	print "answered: $c $f $key\n";
+	my $sgn=1;
+	if(lc($key) =~ "q"){
+		&snd_stop(0);
+		&mood("board");
+		$crap->destroy;
+		&ser_dis if ($tty);  # "input nach 'q' auf frage" fix.
+		$button[$c][$f]->focusForce if ($force);
+		$global_dbl_ply=0; # Nobody has the tag...
+		return;
+	};
+	&snd_stop() if ($key eq "0"); # XXX
+	my $pos;
+	$key=-$pos if (($pos=index('0!"#$%&/()',$key))>0);
+	$key=-3  if($key eq '§');
+	$key="0" if($key eq "`"); # Be nice on ami-kbd
+	$key="0" if($key eq "^"); # Be nice on german-kbd
+
+	print "->$key\n" if ($debug);
+
+	if($key=~/^-?\d$/){
+		if ($key<0) {
+			$sgn=-$sgn;
+			$key=-$key;
+			&mood("wrong");
+		}else{
+			&mood("right");
+		};
+		if ($key <= $#players){
+			&updPlayfield($c,$f,$key,$sgn);
+			$crap->destroy if ($sgn>0);
+			&ser_reset if ($tty);
+			$button[$c][$f]->focusForce if ($force && ($sgn>0));
+#			&snd_stop(0);
+			return;
+		};
+	};
+	print "I don't like this key ($key)...\n" if($debug);
+};
+
+sub updPlayfield {
+	my ($c,$f,$key,$sgn)=@_;
+	print $sgn<0?"bad":"good"," for ",$players[$key],"\n";
+	print SAV "[DBL] $global_dbl_amt\n" if ($global_is_dbl);
+	print SAV "[sav] $c $f $sgn $key\n";
+	push @{$log[$c][$f]},[$sgn,$key,$global_is_dbl?$global_dbl_amt:0];
+	if($global_is_dbl){
+		$points[$key]+=$sgn*$global_dbl_amt;
+		$global_is_dbl=0;
+	}else{
+		$points[$key]+=$sgn*$f*100;
+	};
+	if($sgn>0){
+		$global_dbl_ply=$key;
+	}; # cache player who has the tag....
+	
+	updBox($button[$c][$f],$c,$f);
+    print "Pts:",(map {sprintf "%s:%d/",$players[$_],$points[$_]} (1..$#points)),"\n";
+}
+
+sub moveCrsr{
+	my ($widget,$c,$f)=@_;
+	$c=0 if($c>$#Cat);
+	$c=$#Cat if($c<0);
+	$f=1 if($f>$q);
+	$f=$q if($f<1);
+	$button[$c][$f]->focus;
+	return;
+};
+
+sub ser_reset{
+	print "Resetting...\n" if ($debug);
+	my $ok;
+	my $quux= $tl->focusSave();
+
+	$reset->deiconify;
+	$reset->raise;
+	$reset->grab;
+	do {
+		&ser_dis;
+		print Client "R\r\n";
+		Client->flush();
+	print "SER>: R\n" if($debug);
+		$ok=<Client>;
+	print "SER<: <$ok>\n" if($debug);
+		$ok=~s/\r?\n//;
+		if ($ok ne "A"){
+			if ($ok =~ /(\d)/) {
+				&ser_fatal($players[$1].", "._("Knopf loesen").".");
+			}else{
+				&ser_fatal("ser_reset got $ok");
+			};
+		};
+	}while($ok ne "A");
+	print "...done\n" if ($debug);
+	$reset->grabRelease;
+	$reset->withdraw;
+#	$tl->focusForce if ($force);
+	&$quux;
+	if($splash){
+		&ser_PlyEn;
+	};
+};
+
+sub ser_noinp{
+	&ser_fatal("");
+	&ser_reset;
+#	$button[0][0]->focus;
+};
+
+
+sub ser_fatal{
+	my $fatal=(shift);
+
+	my $quux= $tl->focusSave();
+#	print "froobel: ",$quux,"\n";
+
+	$tl->fileevent(\*Client,'readable',[\&ser_eat,\$fatal]);
+	print "ser_fatal: $fatal\n";
+
+	my $answer = $tl->Dialog(-title => "ser_junk",
+			-textvar => \$fatal,
+			-buttons => [ _("nochmal") ],
+			);
+	$answer->overrideredirect(1);
+	$answer->focusForce;
+	$global_question_inhibit=1;
+	$answer->Show();
+	$global_question_inhibit=0;
+	&$quux;
+};
+
+# Eat anything you get.
+sub ser_eat {
+	my $ref=shift;
+	my $foo=scalar(<Client>);
+	print "SER<: <$foo>\n" if($debug);
+	print "got: ",$foo;
+	$foo=~s/\r?\n//;
+	if($foo =~ /^\d+$/){
+		$foo = $players[$foo] ." ". _("ist etwas unruhig")."\n";
+	}else{
+		$foo="Unexpected serial input:\n$foo\n";
+	};
+	${$ref}.=$foo;
+};
+
+#Silently eat anyting...
+sub snd_eat {
+	my $foo=scalar(<Soundd>);
+	print "got: ",$foo;
+};
+sub snd_color {
+	my $foo=scalar(<Soundd>);
+	print "Cgot: ",$foo;
+	if($foo=~/^E/){
+#		$cur_ser_answer[0]->configure(
+#			-background			=> "red",
+#				);
+	};
+
+};
+
+sub enterdbl {
+	my ($crap,$c,$f)=@_;
+
+	my $ich=$crap->Toplevel;
+
+	$global_dbl_maxamt=100*$f*2;
+	$global_dbl_amt=100*$f;
+
+	$ich->overrideredirect(1) if($override);
+	$ich->resizable(0,0);
+	$ich->geometry("-0-0");
+
+
+	my $ftl = $ich->Frame( -relief => 'ridge', -bd => 4)->pack;
+	my $ttl=$ftl->Label(
+			-text	=> "Double Jeopardy",
+			-font	=> $qfont,
+	)->pack(
+			-fill	=>'x',
+			-expand	=> 1,
+	);
+	my $ply=$ftl->Label(
+			-text	=> $players[$global_dbl_ply],
+			-background	=> $colors[$global_dbl_ply],
+			-font	=> $qfont,
+	)->pack(
+			-fill	=>'x',
+			-expand	=> 1,
+	);
+	my $amnt=$ftl->Label(
+			-textvar	=> \$global_dbl_amt,
+			-font	=> $qfont,
+	)->pack(
+			-fill	=>'x',
+			-expand	=> 1,
+	);
+	
+	my $bframe=$ftl->Frame->pack(-fill=>'both',-expand=>1);
+
+	my $br=$bframe->Button(
+			-text		=> _('Ok'),
+			-command	=> sub{
+#							printf("reenter selQ?");
+							&selectQuest($crap,$c,$f,$ich);
+							},
+	)->pack(-fill	=>'x', -expand => 1);
+
+	$br->bind('<j>',sub{&amt_chg(-50)});
+	$br->bind('<k>',sub{&amt_chg(+50)});
+	$br->bind('<l>',sub{&dblplychg($ply,+1)});
+	$br->bind('<h>',sub{&dblplychg($ply,-1)});
+# inzwischen ist Nick der faule hier.
+	$br->bind('<Right>',sub{&dblplychg($ply,+1)});
+	$br->bind('<Left>',sub{&dblplychg($ply,-1)});
+	$br->bind('<Up>',sub{&amt_chg(+50)});
+	$br->bind('<Down>',sub{&amt_chg(-50)});
+	&mood("double $global_dbl_ply");
+
+	$br->focus;
+	$br->focusForce if($force);
+};
+
+sub amt_chg{
+	$global_dbl_amt+=shift;
+	if($global_dbl_amt<0){$global_dbl_amt=0};
+	if($global_dbl_amt>$global_dbl_maxamt){$global_dbl_amt=$global_dbl_maxamt};
+};
+
+sub dblplychg{
+	my($ply,$dir)=@_;
+	$global_dbl_ply+=$dir;
+	$global_dbl_ply=$#players if($global_dbl_ply<1);
+	$global_dbl_ply=1 if ($global_dbl_ply>$#players);
+	$ply->configure(-text => $players[$global_dbl_ply],
+			-background	=> $colors[$global_dbl_ply]);
+	&mood("double $global_dbl_ply");
+};
+
+sub edit_pts {
+	my($widget,$c,$f)=@_;
+	print "Edit!\n";
+
+	my $ichtl=$widget->Toplevel;
+	$ichtl->overrideredirect(1) if($override);
+	$ichtl->resizable(0,0);
+#	$ichtl->geometry("+100+100");
+
+	my $ich = $ichtl->Frame( -relief => 'ridge', -bd => 4)->pack;
+	$ich->Label(
+			-text	=> "$Cat[$c] ${f}00",
+			-font	=> $tfont,
+	)->pack(
+			-fill	=>'x',
+			-expand	=> 1,
+	);
+
+	push @{$log[$c][$f]},[0,0,0];
+
+	my @ebtn;
+	for (0..$#{$log[$c][$f]}){
+		my ($sgn,$ply,$dbl)=@{$log[$c][$f][$_]};
+#		print "$sgn $ply $dbl\n";
+		$ebtn[$_]=$ich->Button(
+				-text		=> "$players[$ply] $sgn [$dbl]",
+				-font		=> $sfont,
+				-command	=> sub{ ; },
+				-background	=> $colors[$ply],
+				-foreground	=> "white",
+			)->pack(-fill	=>'x', -expand => 1);
+	};
+
+	my $br=$ich->Button(
+			-text		=> 'Use: 0-4 +-d and Left-Right.',
+			-font		=> $sfont,
+			-command	=> sub{
+							$ichtl->destroy;
+							updBox($widget,$c,$f);
+							$widget->focusForce if ($force);
+							},
+	)->pack(-fill	=>'x', -expand => 1);
+
+	for (0..$#ebtn){
+		my $cur=$ebtn[$_];
+		$cur->bind('<d>' ,[ \&adjscore, $c,$f,$_, 0,0]);
+		$cur->bind('<plus>' ,[ \&adjscore, $c,$f,$_, 0,+1]);
+		$cur->bind('<minus>' ,[ \&adjscore, $c,$f,$_, 0,-1]);
+		$cur->bind('<KeyPress-0>' ,[ \&adjscore, $c,$f,$_, 1,0]);
+		$cur->bind('<KeyPress-1>' ,[ \&adjscore, $c,$f,$_, 1,1]);
+		$cur->bind('<KeyPress-2>' ,[ \&adjscore, $c,$f,$_, 1,2]);
+		$cur->bind('<KeyPress-3>' ,[ \&adjscore, $c,$f,$_, 1,3]);
+		$cur->bind('<KeyPress-4>' ,[ \&adjscore, $c,$f,$_, 1,4]) if($#players==4);
+		$cur->bind('<Left>'  ,[ \&adjscore, $c,$f,$_, 2,-50]);
+		$cur->bind('<Right>' ,[ \&adjscore, $c,$f,$_, 2,+50]);
+	};
+
+	push @ebtn,$br;
+
+	for (0..$#ebtn){
+		my $prev=$ebtn[$_-1];
+		my $next=$ebtn[$_+1];
+		$ebtn[$_]->bind('<k>' ,sub{$prev->focus}) unless $_ == 0;
+		$ebtn[$_]->bind('<Up>' ,sub{$prev->focus}) unless $_ == 0;
+		$ebtn[$_]->bind('<Down>' ,sub{$next->focus}) unless $_ == $#ebtn;
+		$ebtn[$_]->bind('<j>' ,sub{$next->focus}) unless $_ == $#ebtn;
+		$ebtn[$_]->bind('<q>' ,sub{$ichtl->destroy;
+							updBox($widget,$c,$f);
+							$widget->focusForce if ($force);
+							} 
+				);
+	};
+
+	$br->focus;
+	$br->focusForce if($force);
+
+	$ichtl->idletasks;
+	$ichtl->geometry(sprintf "+%d+%d",($ich->screenwidth-$ich->width)/2,($ich->screenheight-$ich->height)/2);
+
+};
+
+sub adjscore{
+	my ($wid,$c,$f,$nr,$adjw,$adjto)=@_;
+#	print "adj $adjw $adjto\n";
+	my $pts=$f*100;
+	$pts= $log[$c][$f][$nr][2] if($log[$c][$f][$nr][2]);
+	$pts*=$log[$c][$f][$nr][0];
+	$points[$log[$c][$f][$nr][1]]-=$pts;
+
+	print SAV "<edit>\n";
+	print SAV "[DBL] $log[$c][$f][$nr][2]\n" if($log[$c][$f][$nr][2]);
+	print SAV "[sav] $c $f ".(-$log[$c][$f][$nr][0])." ".($log[$c][$f][$nr][1])."\n";
+
+	if($adjw==2){
+	$log[$c][$f][$nr][$adjw]+=$adjto;
+	}else{
+	$log[$c][$f][$nr][$adjw]=$adjto;
+	};
+
+	$pts=$f*100;
+	$pts= $log[$c][$f][$nr][2] if($log[$c][$f][$nr][2]);
+	$pts*=$log[$c][$f][$nr][0];
+	$points[$log[$c][$f][$nr][1]]+=$pts;
+
+	print SAV "[DBL] $log[$c][$f][$nr][2]\n" if($log[$c][$f][$nr][2]);
+	print SAV "[sav] $c $f ".($log[$c][$f][$nr][0])." ".($log[$c][$f][$nr][1])."\n";
+
+	$wid->configure(-text=>"$players[$log[$c][$f][$nr][1]] $log[$c][$f][$nr][0] [$log[$c][$f][$nr][2]]",
+			-background	=> $colors[$log[$c][$f][$nr][1]]
+			);
+};
+
+sub updBox{
+	my($wid,$c,$f)=@_;
+
+	my $pl="";
+	my $col=$colors[0];
+
+	my @lst;
+	@lst=@{$log[$c][$f][$#{$log[$c][$f]}]};
+	if ($lst[0]==0 && $lst[1] ==0){
+		pop@{$log[$c][$f]};
+	};
+
+	my $nothing=1;
+	for(@{$log[$c][$f]}){
+		my ($sgn,$ply,$dbl)=@{$_};
+		next if($sgn==0);
+		$pl.="\n"if($pl);
+		$pl.=($sgn==1?"+":"-").$players[$ply].($dbl?"[d]":"");
+		$nothing=0 if($sgn!=0);
+		if($sgn>0 && $ply>0){
+			$col=$colors[$ply];
+		}
+	}
+
+	$wid->configure(
+			-text				=> $nothing?"<undef>":$pl,
+			-relief				=> $nothing?"raised":"flat",
+			-foreground			=>'grey',
+			-activeforeground	=>'grey',
+			-height				=> 0,
+			-width				=> 0,
+			-background			=> $nothing?"#d0d0d0":$col,
+			-font				=> $sfont,
+	);
+}
+
+sub finish{
+	my $dlg=$tl->Toplevel;
+	my $i;
+	my $rframe;
+	my @win=sort {$points[$b]<=>$points[$a]} (1..$#points);
+	unshift @win,"0";
+	&mood("end");
+
+#	$dlg->configure(-height => $height, -width => $width);
+#	$dlg->resizable(0,0);
+#	$dlg->packPropagate(0);	# Keep the size.
+	$dlg->overrideredirect(1);
+	my $q=$dlg->Label(qw/-relief raised -width 80/)->pack;
+
+	snd_play("end");
+	$i= $q->Pixmap("beopardy",-file => "img/beopardy.xpm");
+	if(defined($i)){
+		$q->Label(-image=>"beopardy")->pack(-side=>"top");
+	};
+
+	my $f = $q->Frame->pack(-fill=>'both',-expand=>1);
+	my $row=0;
+	foreach (1..$#players) {
+		my $e = $f->Label(qw/-relief sunken/);
+		$e->configure(-text => $points[$win[$_]]);
+		$e->configure(-font => ($_==1)?$qfont:$sfont);
+
+		my $l = $f->Label(-text => "$players[$win[$_]]", 
+			-width		=> $namewidth,
+			-background	=> $colors[$win[$_]],
+			-foreground	=> "white",
+#			-anchor 	=> 'e', 
+			-justify => 'center');
+		$l->configure(-font => $qfont) if ($_ == 1);
+
+		Tk::grid( $l, -row => $row, -column => 0, -sticky => 'e');
+		Tk::grid( $e, -row => $row++, -column => 1,-sticky => 'ew');
+		$f->gridRowconfigure(1,-weight => 1);  
+	}
+	$dlgbtn=$q->Button(
+			-text	=> "bye",
+			-font	=> $sfont,
+#			-width	=> 30,
+#			-height	=> 2,
+			-command	=> sub {&snd_stop;&ser_reset if($tty);$button[0][1]->focus; $button[0][1]->focusForce if ($force);$dlg->destroy; },
+	)->pack(
+			-fill	=>'x',
+			-expand	=>1,
+	);
+
+	$dlg->idletasks;
+	$dlg->geometry(sprintf "+%d+%d",($dlg->screenwidth-$dlg->width)/2,($dlg->screenheight-$dlg->height)/2);
+
+	$dlg->raise;
+	$dlg->grab;
+	$dlg->focusForce;
+	$dlgbtn->focus;
+	$tl->lower($dlg);
+};
+
+sub randomply{
+	my ($wid)=@_;
+	my $dlg=$wid->Toplevel;
+	$dlg->overrideredirect(1);
+
+	my $ply=int(rand($#players))+1;
+	$global_dbl_ply=$ply;
+
+	my $q=$dlg->Button(
+			-relief		=> "raised",
+			-border		=> 5,
+			-background	=> $colors[$ply],
+			-foreground	=> "white",
+			-font       => $qfont,
+			-text		=> $players[$ply],
+			-command	=> sub {$wid->focusForce if ($force);$dlg->destroy},
+			)->pack();
+
+# Repositioning looks stupid.
+#	$dlg->idletasks;
+#	$dlg->geometry(sprintf "+%d+%d",($dlg->screenwidth-$dlg->width)/2,($dlg->screenheight-$dlg->height)/2);
+	$dlg->geometry(sprintf "+%d+%d",($dlg->screenwidth-100)/2,($dlg->screenheight-40)/2);
+
+	$dlg->raise;
+	$dlg->grab if ($force);
+	$dlg->focusForce if($force);
+	$q->focus;
+};
+
+sub random_ray{
+	my ($wid)=@_;
+	my $dlg=$wid->Toplevel;
+	$dlg->overrideredirect(1);
+
+	my $ply=int(rand($#players))+1;
+	$global_dbl_ply=$ply;
+
+	my $q=$dlg->Button(
+			-relief		=> "raised",
+			-border		=> 5,
+#			-background	=> $colors[$ply],
+			-foreground	=> "white",
+			-font       => $qfont,
+			-text		=> "Hey, ray!",
+			-command	=> sub {$wid->focusForce if ($force);$dlg->destroy},
+			)->pack();
+
+	$dlg->geometry(sprintf "+%d+%d",($dlg->screenwidth-100)/2,($dlg->screenheight-40)/2);
+
+	$dlg->raise;
+	$dlg->grab if ($force);
+	$dlg->focusForce if($force);
+	$q->focus;
+};

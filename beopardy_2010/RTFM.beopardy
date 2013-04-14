@@ -1,0 +1,81 @@
+=== Requisites:
+
+beopardy is in perlTk geschrieben. Es benötigt neben p5-Tk auch noch ein paar
+Fonts. Diese sind bei FreeBSD im "webfonts"-Paket -- können aber alternativ
+auch im source geändert werden.
+
+[HINT] Fonts aussuchen mit xfontsel :-)
+
+Diese Version kann Bilder (nur als .xpm, dafür mit transparenz) 
+Sound und Moodlamp (nur mit soundd).
+
+Zum Debuggen können die Buzzer statt über Serielle auch über telnet emuliert
+werden, siehe dazu RTFM.serial
+
+=== Starten:
+
+./beopardy -h  fuer commandline switches.
+
+Standard Congress Game: ./beopardy -oftyw RundeX.jg
+
+[NOTE] -y braucht einen laufenden soundd auf localhost
+[NOTE] -m (mood) braucht auch einen laufenden soundd UND einen passenden 
+       mood-empfaenger-daemon (leider kein source dafuer da)
+[NOTE] -t braucht eine seriell connectedes Beopardy-Board
+[NOTE] Devicenamen vom seriellen evtl. im source anpassen
+
+[NOTE] -w schreibt ein savgeame "RundeX.jg.<datum>.<zeit>", das mit
+       "-r Filename" wieder eingelesen werden kann, sollte das Game
+       crashen, oder sonstwas.
+
+=== Bedienung:
+
++ Startupscreen: [Nur bei "-b" oder "-t" / "-s"]
+
+Player haut auf Knopf, Bediener muss Namen eingeben, Enter.
+Nachdem alle Player eingegeben sind, Start wählen.
+
+[NOTE] Das Programm kann beliebig viele Mitspieler. Bei mehr als 4 Spielern
+	   müssen die Knöpfe allerdings in aufsteigender Reihenfolge gedrückt
+	   werden. (Bei mehr als 5 müssen u.u. noch Farben im source vergeben
+       werden)
+
+"M" startet den "start" Sound. (Ja, auch wenn er im Playernamen vorkommt %)
+
++ Kein Startupscreen:
+
+Playernamen auf der Kommandozeile angeben.
+
++ Spielebildschirm
+
+Die Maus zum klicken müsste zwar funktionieren, Das Programm ist auf
+Tastaturinput designed. Maus einfach in die untere rechte Ecke schieben. 
+
+hjkl oder Cursorkeys zum "rumlaufen"
+Space oder Enter zum Auswählen
+r fuer blöden Spruch.
+R für Zufallsgenerator.
+Z um den soundd zu resetten. (soundd-protocol "Z")
+Q fuer quit
+F fuer Final-screen
+E fuer Edit points
+
++ double-jeopardy:
+up-down (jk) fuer punkte, right-left (hl) fuer player
+
++ Frage:
+0: keiner richtig
+q: zurueckstellen
+(Hack: 1-4: 1-4 richtig, Shift1-Shift4: 1-4 Falsch)
+
++Knopf gedrückt: 
+right-left (hl) zum auswählen der Richtig/Falsch/Oops buttons.
+[Oops = Knopfdruck ignorieren]
+
++ Edit mode:
+Up-Down (jk) auswahl.
+d: punkte Loeschen
++/-: Frage Richtig/Falsch
+0-4: Player n waehlen
+Right-Left: double-jeopardy punkte edit.
+q: verlassen

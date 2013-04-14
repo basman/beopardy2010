@@ -1,0 +1,53 @@
+=== Serielles Protokoll
+
+Alle Befehle und Antworten haben Lineend==\r\n
+
+Das Board hat zwei modi "Sync" und "Async", wobei beopardy nur
+den Async-Mode verwendet.
+
++ Async mode:
+Host "R" (Reset):
+	Board "A" (Ack)
+	Board "1"-"4": Knopf noch (gerade) gedrückt.
+
+[NOTE] Nur nach "R" -> "A" ist das Board wieder in aktivem Zustand.
+
+Board "1"-"4": Gerade wurde der Knopf gedrückt.
+
+[NOTE] Bis zum nächsten "R" wird nichts mehr geschickt.
+
+Host "S" (Sync) - umschalten in Sync mode. Board schickt "S"
+
++ Sync mode:
+
+Host "Q" (Query):
+	Board "0":     Kein Knopf gedrückt.
+	Board "1"-"4": Knopf 1-4 gedrückt.
+
+Host "A" (Async) - umschalten in Async mode. Board schickt "A"
+
+=== Serielles Setup:
+
+Serial port wird im source configuriert.
+
+Der Port muss vorher von aussen auf 19.2 8n1 kein handshake eingestellt werden.
+Unter FreeBSD geht das mit
+
+stty 19200 -crtscts </dev/cuaa0.init
+
++ USBserial: (FreeBSD)
+
+kldload /boot/kernel/uplcom.ko
+stty 19200 -crtscts -icrnl </dev/cuaU0.init
+cu -l /dev/cuaU0 -s 19200
+<board einschalten, Meldung sehen>
+~.  <cu verlassen>
+
+[NOTE] Bei mir ist der Aufruf von cu unbedingt nötig, sonst Puffert die
+       USBSerial alles. - Keine Ahnung wieso.
+
++ TelnetSerial
+
+beopardy mit "-s"(Socket) statt "-t"(Tty) starten. Beopardy wartet dann beim
+Starten auf einen connect auf TCP localhost:3333, auf dem oben erklärtes
+Protokoll gesprochen werden muss.
