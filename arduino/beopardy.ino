@@ -71,7 +71,7 @@ void setup() {
   // set pin modes
   pinMode(ledPin, OUTPUT);
 #endif
-  
+
   for(int i=0; i<PLAYERS; i++) {
       pinMode(buttonPins[i], INPUT);
       // activate pull-up resistors
@@ -79,7 +79,7 @@ void setup() {
       pinMode(lampPins[i], OUTPUT);
       digitalWrite(lampPins[i], LOW);
   }
-  
+
   randomSeed(analogRead(0));
   resetBoard();
 }
@@ -135,16 +135,16 @@ void suppressButton(int button_nr) {
 // this function shall be called from a loop, so consecutive reads on button pins make it through debouncing
 int scanButtons() {
     static unsigned long lastScan = millis();
-    
+
     // debouncing interval between button readouts
     if (millis()-lastScan < 1)
         return 0;
-    
+
     for(int i=0; i<PLAYERS; i++) {
-      
+
         if((suppressedButtons & (1<<i)) != 0)
             continue;
-      
+
         if(digitalRead(buttonPins[i]) == BUTTON_PUSHED) {
             debounceCounters[i]++;
             if(debounceCounters[i] >= DEBOUNCE_COUNT) {
@@ -165,18 +165,18 @@ int scanButtons() {
 void receiveCommand() {
   // read command via USB
   int cmd = Serial.read();
-  
+
   if(cmd == 'A') {  // switch to async mode (board signals pressed buttons to PC anytime)
     asyncMode = true;
     Serial.println("A");
-    
+
   } else if(cmd == 'S') {  // switch to sync mode (PC polls for pressed buttons)
     asyncMode = false;
     Serial.println("S");
-    
+
   } else if (cmd == 'Q' && !asyncMode) {  // poll in sync mode
       Serial.println(button);
-      
+
   } else if(cmd == 'R') {  // reset board (async mode)
     int curButtons = currentButtons();
     if(curButtons == 0) {
@@ -187,10 +187,10 @@ void receiveCommand() {
       // indicate currently pressed button (only one with lowest index)
       Serial.println(bitmask2button(curButtons));
     }
-    
+
   } else if(cmd == 'F' && button != 0) { // answer was incorrect, ignore active button
     int curButtons = currentButtons();
-    if(curButtons == 0) {    
+    if(curButtons == 0) {
       suppressButton(button);
       button = 0;
       Serial.println("A");
@@ -212,20 +212,20 @@ void receiveCommand() {
 // two quick fade-in/fade-out flashes
 void animateLamps() {
   static unsigned long lastStep = 0;
-  
+
   // animation step interval is 4ms
   if(millis()-lastStep < 4)
     return;
-    
+
   lastStep = millis();
-    
+
   for(int i=0; i<PLAYERS; i++) {
      if((suppressedButtons & (1<<i)) != 0)
          continue;
-    
+
      if(lampPauses[i] > 0) {
          lampPauses[i]--;
-         
+
      } else if(lampValues[i] % 4 == 0) {     // stage 1: fade in
          lampValues[i] += 4;
          if(lampValues[i] >= 252) {
@@ -233,7 +233,7 @@ void animateLamps() {
              lampValues[i]++;
          }
          analogWrite(lampPins[i], lampValues[i]);
-         
+
      } else if(lampValues[i] % 4 == 1) {     // stage 2: fade out
          lampValues[i] -= 4;
          if(lampValues[i] <= 1) {
@@ -249,7 +249,7 @@ void animateLamps() {
              lampValues[i]++;
          }
          analogWrite(lampPins[i], lampValues[i]);
-         
+
      } else if(lampValues[i] % 4 == 3) {     // stage 4: fade out
          lampValues[i] -= 4;
          if(lampValues[i] <= 3) {
@@ -260,7 +260,7 @@ void animateLamps() {
          analogWrite(lampPins[i], lampValues[i]);
      }
   }
-  
+
 }
 
 void loop() {
@@ -268,7 +268,7 @@ void loop() {
   if(Serial.available() > 0) {
      receiveCommand();
   }
-  
+
   // scan buttons only if no button pressed
   if(button == 0) {
       // blink buttons that are still in the game
@@ -276,6 +276,6 @@ void loop() {
 
       if(scanButtons() && asyncMode) {
           Serial.println(button);
-      }      
+      }
   }
 }
