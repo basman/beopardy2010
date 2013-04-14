@@ -192,7 +192,7 @@ if($soundd){
 
 print "Reading questions....\n";
 my %jdata;
-open (J,"<Jeopardy") || die;
+open (J,"<Jeopardy") || die "open file 'Jeopardy' failed: $!";
 my ($nam,$c);
 while (<J>){
 	chomp;
@@ -233,7 +233,7 @@ sub read_game{
 	my $title=$1;		# Titel des Spielfelds.
 
 	print "\nReading game '$title' ...\n";
-	open(G,"<$gamefile") || die;
+	open(G,"<$gamefile") || die "open file '$gamefile' failed: $!";
 	while (<G>){
 		chomp;
 		next if (/^\s*(#|$)/);
