@@ -164,10 +164,10 @@ if ($tty){
 		print "connection from $name [", inet_ntoa($iaddr), "] at port $iport\n";
 	}else{
 		# Be sure to set device to -crtscts 19200
-		open(Client,"+>/dev/ttyS0") || die "open: $!";
+		open(Client,"+>/dev/ttyUSB0") || die "open: $!";
 		use IO::Stty;
 #		IO::Stty::stty(\*Client,"-crtscts");
-		IO::Stty::stty(\*Client,"19200");
+		IO::Stty::stty(\*Client,"9600");
 		IO::Stty::stty(\*Client,"-echo");
 		IO::Stty::stty(\*Client,"-icrnl");
 	};
