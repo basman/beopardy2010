@@ -9,7 +9,7 @@ $|=1;
 use POE qw(Wheel::SocketFactory Wheel::ReadWrite Driver::SysRW Filter::Stream Wheel::Run);
 use IO::Socket::INET;
 
-my $mood=1;
+my $mood=0;
 my $moodip=inet_aton("10.0.0.9");
 my $moodport=11001;
 
