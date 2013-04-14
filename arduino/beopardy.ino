@@ -196,13 +196,17 @@ void receiveCommand() {
       Serial.println("A");
     } else {
       // indicate currently pressed button (only one with lowest index)
-      Serial.println(bitmask2button(curButtons));     
-    } 
+      Serial.println(bitmask2button(curButtons));
+    }
+
+  } else if(cmd == '\n' || cmd == '\r') {
+    // ignore newline characters
   } else {
     // indicate invalid or unknown command
+    //Serial.print(cmd);
     Serial.println("?");
   }
-  Serial.flush();  
+  Serial.flush();  // this waits until all data has been transmitted (it does not discard incoming data)
 }
 
 // two quick fade-in/fade-out flashes
@@ -261,8 +265,8 @@ void animateLamps() {
 
 void loop() {
   // watch out for serial input
-  if(Serial.available() != 0) {
-     receiveCommand(); 
+  if(Serial.available() > 0) {
+     receiveCommand();
   }
   
   // scan buttons only if no button pressed
