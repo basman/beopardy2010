@@ -32,7 +32,7 @@
  * setting this higher than 5 will redefine the onboard LED
  * maximum setting is 6 for the Arduino nano v3.0.
  */
-#define PLAYERS 5
+#define PLAYERS 6
 
 int buttonPins[] = { 2, 4, 7, 8, 12, 13 };
 int lampPins[]   = { 3, 5, 6, 9, 10, 11 };
