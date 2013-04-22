@@ -188,6 +188,16 @@ void receiveCommand() {
       Serial.println(bitmask2button(curButtons));
     }
 
+  } else if(cmd == 'O' && button != 0) { // oops, button pressed accidentially - partial reset
+    int curButtons = currentButtons();
+    if(curButtons == 0) {
+      button = 0;
+      Serial.println("A");
+    } else {
+      // indicate currently pressed button (only one with lowest index)
+      Serial.println(bitmask2button(curButtons));
+    }
+
   } else if(cmd == 'F' && button != 0) { // answer was incorrect, ignore active button
     int curButtons = currentButtons();
     if(curButtons == 0) {
