@@ -1,0 +1,23 @@
+Serial commands:
+
+Command: 'A' - put board into async mode
+Reply:   'A'
+
+Command: 'S' - put board in sync mode (polling)
+Reply:  'S'
+
+Command: 'Q' - poll for pressed button
+Reply:   '0' - no button pressed
+Reply:   N   - number of pressed button
+
+Command: 'R' - reset board
+Reply:   'A' - ok
+Reply:   N   - alert button currently pressed
+
+Command: 'F' - false answer given (disable current button)
+Reply:   'A' - ok
+Reply:   N   - alert button currently pressed
+
+Command: 'O' - oops, ignore last button
+Reply:   'A' - ok
+Reply:   N   - alert button currently pressed
