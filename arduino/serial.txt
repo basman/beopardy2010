@@ -21,3 +21,7 @@ Reply:   N   - alert button currently pressed
 Command: 'O' - oops, ignore last button
 Reply:   'A' - ok
 Reply:   N   - alert button currently pressed
+
+Any command
+Reply:   '?' - command unknown or invalid in current state
+               (e.g. 'Q' in async mode)
