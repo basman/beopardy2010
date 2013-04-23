@@ -102,7 +102,7 @@ void resetLamps() {
   for(int i=0; i<PLAYERS; i++) {
     digitalWrite(lampPins[i], LOW);  // switch off all lamps
     lampValues[i] = 0;               // reset animation state
-    lampPauses[i] = 0;   // initialize animation pause for each lamp differently
+    lampPauses[i] = 0;               // initialize animation pause
   }
 }
 
