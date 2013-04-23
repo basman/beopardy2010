@@ -19,12 +19,6 @@
   Lamp 5: pin  D10 (PWM capable)
   Lamp 6: pin  D11 (PWM capable)
 
-
-  TODO
-  
-    - blinking lamps indicate players may press their buttons
-    - lock players that already gave a wrong answer during current round
-
 */
 
 /* PLAYERS: maximum number of players the hardware supports
