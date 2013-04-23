@@ -186,6 +186,7 @@ void receiveCommand() {
     int curButtons = currentButtons();
     if(curButtons == 0) {
       button = 0;
+      resetLamps();
       Serial.println("A");
     } else {
       // indicate currently pressed button (only one with lowest index)
@@ -197,6 +198,7 @@ void receiveCommand() {
     if(curButtons == 0) {
       suppressButton(button);
       button = 0;
+      resetLamps();
       Serial.println("A");
     } else {
       // indicate currently pressed button (only one with lowest index)
