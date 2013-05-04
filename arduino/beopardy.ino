@@ -233,26 +233,28 @@ void animateLamps() {
          lampPauses[i]--;
 
      } else if(lampValues[i] % 4 == 0) {     // stage 1: fade in
-         lampValues[i] += 4;
-         if(lampValues[i] >= 252) {
+         lampValues[i] += 12;
+         if(lampValues[i] >= 255) {
              // next stage
-             lampValues[i]++;
+             lampValues[i]=253;
          }
          analogWrite(lampPins[i], lampValues[i]);
 
      } else if(lampValues[i] % 4 == 1) {     // stage 2: fade out
-         lampValues[i] -= 4;
+         lampValues[i] -= 8;
          if(lampValues[i] <= 1) {
              // next stage
-             lampValues[i]++;
+             lampValues[i]=2;
+             // pause before next fade in
+             lampPauses[i] = 100;
          }
          analogWrite(lampPins[i], lampValues[i]);
 
      } else if(lampValues[i] % 4 == 2) {     // stage 3: fade in
          lampValues[i] += 4;
-         if(lampValues[i] >= 254) {
+         if(lampValues[i] >= 255) {
              // next stage
-             lampValues[i]++;
+             lampValues[i]=255;
          }
          analogWrite(lampPins[i], lampValues[i]);
 
@@ -261,7 +263,7 @@ void animateLamps() {
          if(lampValues[i] <= 3) {
              // back to first stage
              lampValues[i] = 0;
-             lampPauses[i] = random(100,375); // pause lamps for 375
+             lampPauses[i] = random(200,375); // pause lamps
          }
          analogWrite(lampPins[i], lampValues[i]);
      }
