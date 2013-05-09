@@ -504,7 +504,7 @@ if($splash){ # Splash-Screen
 			   			-width	=> 30);
 		$e->insert(0,$players[$_]);
 		if($tty){
-			$e->bind('<Return>',[\&ser_reset,\&ser_PlyEn]);
+			$e->bind('<Return>',[\&ser_reset,'F']);
 		}else{
 			$e->bind('<Return>',[\&ply_focus,$_+1]);
 		};
@@ -579,9 +579,7 @@ sub ply_focus {
 						-font	=> $sfont,
 			   			-width	=> 30);
 			$e->insert(0,$players[$key]);
-# TODO use 'F' command to disable button during setup phase, make sure to use 'R' after last player has been registered
-#      is the argument ser_PlyEn really used? if not, pass 'F' here.
-			$e->bind('<Return>',[\&ser_reset,\&ser_PlyEn]);
+			$e->bind('<Return>',[\&ser_reset,'F']); # WTF: ply_focus is only used if $tty is not set
 			$e->bind('<FocusOut>',[\&set_ply,$key]);
 
 			my $l = $f->Label(-text => "Player $key", 
@@ -958,8 +956,8 @@ sub moveCrsr{
 };
 
 sub ser_reset{
-    my ($result) = @_;
-	print "Resetting...\n" if ($debug);
+    my ($crap, $result) = @_;
+	print "Resetting (mode '$result')...\n" if ($debug);
 
     # catch Tk callback cases
     if(!defined $result || ref $result ne '') {
@@ -976,7 +974,7 @@ sub ser_reset{
 		&ser_dis;
 		print Client "$result\r\n";
 		Client->flush();
-	print "SER>: R\n" if($debug);
+	print "SER>: $result\n" if($debug);
 		$ok=<Client>;
 	print "SER<: <$ok>\n" if($debug);
 		$ok=~s/\r?\n//;
