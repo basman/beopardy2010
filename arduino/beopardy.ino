@@ -106,6 +106,12 @@ void resetLamps() {
   }
 }
 
+void suppressAllButtons() {
+  for(int i=0; i<PLAYERS; i++) {
+    suppressButton(i+1);
+  }
+}
+
 void activateLamp(int index) {
   resetLamps();
   digitalWrite(lampPins[index], HIGH);
@@ -204,6 +210,11 @@ void receiveCommand() {
       // indicate currently pressed button (only one with lowest index)
       Serial.println(bitmask2button(curButtons));
     }
+
+  } else if(cmd == 'N') {  // silence all lamps and buttons
+    resetLamps();
+    suppressAllButtons();
+    Serial.println("A");
 
   } else if(cmd == '\n' || cmd == '\r') {
     // ignore newline characters

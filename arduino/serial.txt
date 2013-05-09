@@ -22,6 +22,9 @@ Command: 'O' - oops, ignore last button
 Reply:   'A' - ok
 Reply:   N   - alert button currently pressed
 
+Command: 'N' - switch off all buttons and lamps
+Reply:   'A' - ok
+
 Any command
 Reply:   '?' - command unknown or invalid in current state
                (e.g. 'Q' in async mode)
