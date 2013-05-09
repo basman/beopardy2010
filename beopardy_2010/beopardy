@@ -526,7 +526,7 @@ if($splash){ # Splash-Screen
 			-font	=> $qfont,
 #			-width	=> 30,
 			-height	=> 2,
-			-command	=> sub {$splash=0;&snd_stop;&ser_reset if($tty);$button[0][1]->focus; $button[0][1]->focusForce if ($force);&mood("start");$dlg->destroy;
+			-command	=> sub {$splash=0;&snd_stop;&ser_reset('N') if($tty);$button[0][1]->focus; $button[0][1]->focusForce if ($force);&mood("start");$dlg->destroy;
 			print SAV "[ply] ",join("/",@players),"\n";
 			},
 	)->pack(
