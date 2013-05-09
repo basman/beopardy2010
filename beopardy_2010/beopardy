@@ -615,7 +615,8 @@ sub ser_SelectPly {
 	$key=~s/\r?\n$//;
 	$key=$key+0;
 	if($key == 0){
-		&ser_reset;
+        # empty string or garbage received
+        # &ser_reset;
 	}else{
 		&ply_focus(".",$key);
 		&ser_dis;
