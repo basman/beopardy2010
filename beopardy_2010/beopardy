@@ -579,6 +579,8 @@ sub ply_focus {
 						-font	=> $sfont,
 			   			-width	=> 30);
 			$e->insert(0,$players[$key]);
+# TODO use 'F' command to disable button during setup phase, make sure to use 'R' after last player has been registered
+#      is the argument ser_PlyEn really used? if not, pass 'F' here.
 			$e->bind('<Return>',[\&ser_reset,\&ser_PlyEn]);
 			$e->bind('<FocusOut>',[\&set_ply,$key]);
 
@@ -805,7 +807,7 @@ sub ser_answerQuest {
 	my $bo=$bframe->Button(
 			-text		=> _('Oops'),
 			-command	=> sub{$ich->destroy;
-							  &ser_reset;
+							  &ser_reset('O');
 #							  &snd_stop;
 							  &mood("question");
 							  &snd_resume;
@@ -916,7 +918,7 @@ sub answerQuest{
 		if ($key <= $#players){
 			&updPlayfield($c,$f,$key,$sgn);
 			$crap->destroy if ($sgn>0);
-			&ser_reset if ($tty);
+			&ser_reset($sgn>0 ? 'R' : 'F') if ($tty);
 			$button[$c][$f]->focusForce if ($force && ($sgn>0));
 #			&snd_stop(0);
 			return;
@@ -956,7 +958,14 @@ sub moveCrsr{
 };
 
 sub ser_reset{
+    my ($result) = @_;
 	print "Resetting...\n" if ($debug);
+
+    # catch Tk callback cases
+    if(!defined $result || ref $result ne '') {
+         $result = 'R';
+    }
+
 	my $ok;
 	my $quux= $tl->focusSave();
 
@@ -965,7 +974,7 @@ sub ser_reset{
 	$reset->grab;
 	do {
 		&ser_dis;
-		print Client "R\r\n";
+		print Client "$result\r\n";
 		Client->flush();
 	print "SER>: R\n" if($debug);
 		$ok=<Client>;
