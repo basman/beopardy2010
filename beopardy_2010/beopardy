@@ -184,7 +184,7 @@ if($soundd){
 		my $iaddr   = inet_aton("localhost");
 		my $paddr   = sockaddr_in($port, $iaddr);
 		$proto   = getprotobyname('tcp');
-		connect(Soundd, $paddr)							|| die "connect: $!";
+		connect(Soundd, $paddr)							|| die "connect to sound server failed: $!";
 		autoflush Soundd;
 };
 &snd_stop(0); # Just to make sure, and to install snd_eat.
