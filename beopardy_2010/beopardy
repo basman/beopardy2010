@@ -958,7 +958,7 @@ sub moveCrsr{
 
 sub ser_reset{
     my ($crap, $result) = @_;
-	print "Resetting (mode '$result')...\n" if ($debug);
+	print "Resetting (mode '" . ($result || '') . "')...\n" if ($debug);
 
     # catch Tk callback cases
     if(!defined $result || ref $result ne '') {
