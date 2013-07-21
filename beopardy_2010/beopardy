@@ -47,6 +47,7 @@ my %ln = (
 		"Knopf loesen"		=> "release your button",
 		"nochmal"			=> "try again",
 		"Zuhören..."		=> "listen...",
+		"Serielle Verbindung unterbrochen"		=> "lost serial connection",
 		);
 
 sub _ {
@@ -1040,6 +1041,10 @@ sub ser_fatal{
 sub ser_eat {
 	my $ref=shift;
 	my $foo=scalar(<Client>);
+    if(!defined $foo) {
+        # show pop up "serial connection lost"
+        &ser_fatal(_("Serielle Verbindung unterbrochen").".");
+    }
 	print "SER<: <$foo>\n" if($debug);
 	print "got: '$foo'";
 	$foo=~s/\r?\n//;
