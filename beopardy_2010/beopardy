@@ -969,12 +969,17 @@ sub moveCrsr{
 };
 
 sub ser_reset{
-    my ($crap, $result) = @_;
-	print "Resetting (mode '" . ($result || '') . "')...\n" if ($debug);
+    my ($crap, $reset_command) = @_;
+    # this sub is used in two different ways: called directly and as callback routine
+    if($crap && ref $reset_command eq '') {
+        # called directly
+        $reset_command = $crap;
+    }
+	print "Resetting (mode '" . ($reset_command || '') . "')...\n" if ($debug);
 
     # catch Tk callback cases
-    if(!defined $result || ref $result ne '') {
-         $result = 'R';
+    if(!defined $reset_command || ref $reset_command ne '') {
+         $reset_command = 'R';
     }
 
 	my $ok;
@@ -985,9 +990,9 @@ sub ser_reset{
 	$reset->grab;
 	do {
 		&ser_dis;
-		print Client "$result\r\n";
+		print Client "$reset_command\r\n";
 		Client->flush();
-	print "SER>: $result\n" if($debug);
+	print "SER>: $reset_command\n" if($debug);
 		$ok=<Client>;
 	print "SER<: <$ok>\n" if($debug);
 		$ok=~s/\r?\n//;
