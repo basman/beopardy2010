@@ -380,7 +380,7 @@ for my $cat (0..$#Cat){
 		$button[$cat][$q]->bind('<E>',[\&edit_pts,$cat  ,$q  ]);
 		$button[$cat][$q]->bind('<F>',[\&finish]);
 		$button[$cat][$q]->bind('<R>',[\&randomply]);
-		$button[$cat][$q]->bind('<r>',[\&random_ray]);
+#		$button[$cat][$q]->bind('<r>',[\&random_ray]);
 #		$button[$cat][$q]->bind('<FocusIn>',sub{
 #				$button[$cat][$q]->configure(-border=>10)});
 #		$button[$cat][$q]->bind('<FocusOut>',sub{
