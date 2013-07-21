@@ -1040,12 +1040,12 @@ sub ser_eat {
 	my $ref=shift;
 	my $foo=scalar(<Client>);
 	print "SER<: <$foo>\n" if($debug);
-	print "got: ",$foo;
+	print "got: '$foo'";
 	$foo=~s/\r?\n//;
 	if($foo =~ /^\d+$/){
 		$foo = $players[$foo] ." ". _("ist etwas unruhig")."\n";
 	}else{
-		$foo="Unexpected serial input:\n$foo\n";
+		$foo="Unexpected serial input: '$foo'\n";
 	};
 	${$ref}.=$foo;
 };
