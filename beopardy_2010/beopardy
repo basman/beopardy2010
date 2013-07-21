@@ -623,6 +623,7 @@ sub ser_SelectPly {
 	my $key=<Client>;
 	print "SER<: <$key>\n" if($debug);
 	$key=~s/\r?\n$//;
+    return if($key !~ /^\d+$/);
 	$key=$key+0;
 	if($key == 0){
         # empty string or garbage received
