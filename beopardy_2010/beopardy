@@ -643,8 +643,7 @@ $reset->geometry("-0+0");
 $reset->withdraw;
 $reset->Label(-text=>"resetting",-background=>"green")->pack;
 
-#$tl->after(100,\&ser_reset) if($tty);
-\&ser_reset if($tty);
+$tl->after(100,\&ser_reset) if($tty);
 
 MainLoop;
 
