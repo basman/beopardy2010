@@ -175,7 +175,7 @@ if ($tty){
         }
 
 		# Be sure to set device to -crtscts 19200
-		open(Client,"+>$tty_file") || die "open: $!";
+		open(Client, "+<", $tty_file) || die "open: $!";
 		use IO::Stty;
 #		IO::Stty::stty(\*Client,"-crtscts");
 		IO::Stty::stty(\*Client,"9600");
