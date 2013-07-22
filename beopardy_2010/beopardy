@@ -971,7 +971,7 @@ sub moveCrsr{
 sub ser_reset{
     my ($crap, $reset_command) = @_;
     # this sub is used in two different ways: called directly and as callback routine
-    if($crap && ref $reset_command eq '') {
+    if($crap && ref $crap eq '') {
         # called directly
         $reset_command = $crap;
     }
