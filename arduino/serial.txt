@@ -1,9 +1,9 @@
 Serial commands:
 
-Command: 'A' - put board into async mode
+Command: 'A' - switch to async mode
 Reply:   'A'
 
-Command: 'S' - put board in sync mode (polling)
+Command: 'S' - switch to sync mode (polling)
 Reply:  'S'
 
 Command: 'Q' - poll for pressed button
