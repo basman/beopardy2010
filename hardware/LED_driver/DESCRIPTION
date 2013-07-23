@@ -1,0 +1,3 @@
+Jeopardy shield for the Arduino Nano
+
+Connects the Arduino Nano via driver transistors to the lamps and the push buttons, using 6 type A USB ports (3x dual port).
