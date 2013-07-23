@@ -53,7 +53,14 @@ int button = 0;                // indicates which button was pressed first, or z
 int debounceCounters[PLAYERS]; // debounce counters for each button
 unsigned char suppressedButtons;     // bitmask that indicates suppressed buttons (player gave wrong answer)
 
-int lampValues[PLAYERS];
+// these arrays control the lamp flickering
+// TODO control transition speed
+const unsigned short lampHold[]  = {  50, 100,  50, 100,  50, 100,  50, 100, 400, 2500 }; // unit: ms
+const unsigned char lampValues[] = { 255,  10, 255,  10, 255,  10, 255,  10, 255,    0 }; // PWM duty cycle between 0 and 255
+#define ANIM_STEPS sizeof(lampHold)/sizeof(lampHold[0])
+#define ANOM_LOOP_IDX 8 // repeat animation at this element index
+
+int lampProgressIdx[PLAYERS];
 int lampPauses[PLAYERS];
 
 
@@ -101,7 +108,7 @@ int bitmask2button(int bitmask) {
 void resetLamps() {
   for(int i=0; i<PLAYERS; i++) {
     digitalWrite(lampPins[i], LOW);  // switch off all lamps
-    lampValues[i] = 0;               // reset animation state
+    lampProgressIdx[i] = 0;          // reset animation state
     lampPauses[i] = 0;               // initialize animation pause
   }
 }
@@ -230,8 +237,8 @@ void receiveCommand() {
 void animateLamps() {
   static unsigned long lastStep = 0;
 
-  // animation step interval is 4ms
-  if(millis()-lastStep < 4)
+  // animation time resolution is 1 ms
+  if(millis()-lastStep < 1)
     return;
 
   lastStep = millis();
@@ -243,43 +250,18 @@ void animateLamps() {
      if(lampPauses[i] > 0) {
          lampPauses[i]--;
 
-     } else if(lampValues[i] % 4 == 0) {     // stage 1: fade in
-         lampValues[i] += 12;
-         if(lampValues[i] >= 255) {
-             // next stage
-             lampValues[i]=253;
-         }
-         analogWrite(lampPins[i], lampValues[i]);
-
-     } else if(lampValues[i] % 4 == 1) {     // stage 2: fade out
-         lampValues[i] -= 8;
-         if(lampValues[i] <= 1) {
-             // next stage
-             lampValues[i]=2;
-             // pause before next fade in
-             lampPauses[i] = 100;
-         }
-         analogWrite(lampPins[i], lampValues[i]);
-
-     } else if(lampValues[i] % 4 == 2) {     // stage 3: fade in
-         lampValues[i] += 4;
-         if(lampValues[i] >= 255) {
-             // next stage
-             lampValues[i]=255;
-         }
-         analogWrite(lampPins[i], lampValues[i]);
-
-     } else if(lampValues[i] % 4 == 3) {     // stage 4: fade out
-         lampValues[i] -= 4;
-         if(lampValues[i] <= 3) {
-             // back to first stage
-             lampValues[i] = 0;
-             lampPauses[i] = random(200,375); // pause lamps
-         }
-         analogWrite(lampPins[i], lampValues[i]);
-     }
+     } else {
+        // advance to next animation element
+        lampProgressIdx[i] += 1;
+        if(lampProgressIdx[i] >= ANIM_STEPS) {
+          lampProgressIdx[i] = ANOM_LOOP_IDX - 1;
+          lampPauses[i] = random(10,400); // make lamps divert (after one animation completed)
+        } else {
+            analogWrite(lampPins[i], lampValues[lampProgressIdx[i]]);
+            lampPauses[i] = lampHold[lampProgressIdx[i]];
+        }
+    }
   }
-
 }
 
 void loop() {
