@@ -1,0 +1,4 @@
+ubuntu packages:
+    perl-tk
+    libio-stty-perl
+    libpoe-perl
