@@ -1010,7 +1010,6 @@ sub ser_reset{
     }
 
 	my $ok;
-    my $retry = 1;
 	my $quux= $tl->focusSave();
 
 	$reset->deiconify;
@@ -1027,9 +1026,6 @@ sub ser_reset{
 		if ($ok ne "A"){
 			if ($ok =~ /(\d)/) {
 				&ser_fatal($players[$1].", "._("Knopf loesen").".");
-            }elsif($ok eq '?' && $retry-- > 0) {
-                # retry the reset (Arduino not ready)
-                sleep(1);
 			}else{
 				&ser_fatal("ser_reset got $ok");
 			};
