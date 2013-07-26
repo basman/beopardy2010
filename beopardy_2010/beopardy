@@ -164,17 +164,16 @@ if ($tty){
 		my $name = gethostbyaddr($iaddr,AF_INET);
 		print "connection from $name [", inet_ntoa($iaddr), "] at port $iport\n";
 	}else{
-        # look for /dev/ttyUSB0 till /dev/ttyUSB9
-        my $tty_basefile = "/dev/ttyUSB";
-        my $tty_file = $tty_basefile;
+        # look for arduino buzzer controller through /dev/ttyUSB0..9
+        my $tty_base = "/dev/ttyUSB";
+        my $tty_file = $tty_base;
         for(my $i=0; $i<10 && ! -e $tty_file; $i++) {
-            $tty_file = "$tty_basefile$i";
+            $tty_file = "$tty_base$i";
         }
         if(!-e $tty_file) {
-            die "serial port $tty_basefile\{1-9\} not found";
+            die "serial port ${tty_base}0..9 not found";
         }
 
-		# Be sure to set device to -crtscts 19200
 		open(Client, "+<", $tty_file) || die "open: $!";
 		use IO::Stty;
 #		IO::Stty::stty(\*Client,"-crtscts");
