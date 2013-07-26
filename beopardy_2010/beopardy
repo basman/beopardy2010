@@ -975,8 +975,8 @@ sub ser_startup {
     my $retry = 8;
     my $ok = '';
 
-    print "waiting 5 seconds for game controller...";
-    sleep(4);
+    print "waiting 2 seconds for game controller...";
+    sleep(1);
     print "done\n";
     while($ok ne 'A' && $retry-- > 0) {
         sleep(1);
