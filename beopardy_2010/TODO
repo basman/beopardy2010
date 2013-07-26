@@ -1,2 +1,1 @@
-- ser_reset R when a question field has been clicked
 - reset command failing during first 5 seconds after startup (line 645)

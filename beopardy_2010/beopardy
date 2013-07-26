@@ -755,7 +755,7 @@ sub selectQuest{
 
 	$tl->waitVisibility; # To fix stacking order
 	&mood("question");
-# TODO reset board 'R'
+    &ser_reset('R');
 	if($global_is_dbl){
 		$tl->afterIdle(sub {&ser_answerQuest($tl,$c,$f) if ($tty);});
 	}else{
