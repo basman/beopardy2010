@@ -985,6 +985,9 @@ sub ser_startup {
         Client->flush();
         print "SER>: R\n" if($debug);
         $ok=<Client>;
+        if(!$ok) {
+            die("serial communication disrupted");
+        }
 	    print "SER<: <$ok>\n" if($debug);
 		$ok=~s/\r?\n//;
     }
@@ -1020,9 +1023,10 @@ sub ser_reset{
 		&ser_dis;
 		print Client "$reset_command\r\n";
 		Client->flush();
-	print "SER>: $reset_command\n" if($debug);
+		print "SER>: $reset_command\n" if($debug);
 		$ok=<Client>;
-	print "SER<: <$ok>\n" if($debug);
+		&ser_fatal(_("Serielle Verbindung unterbrochen").".") unless $ok;
+		print "SER<: <$ok>\n" if($debug);
 		$ok=~s/\r?\n//;
 		if ($ok ne "A"){
 			if ($ok =~ /(\d)/) {
