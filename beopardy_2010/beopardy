@@ -289,7 +289,7 @@ my @players;
 if ($#ARGV>0){
 	@players=@ARGV;
 }else{
-	@players=qw(Foo Bar Baz);
+	@players=qw(Foo Bar Baz Zock);
 };
 
 
