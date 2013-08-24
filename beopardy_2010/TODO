@@ -1,2 +1,11 @@
+- manual input of 1,2,3,4 causes reset after answer
+- manual input of shift-1,2,3,4 causes serial error (because F is sent)
+  new command would help: n (n: 1,2,3,4,...): button pressed by computer input.
+  then this error could be prevented by sending for example '2F' in case operator
+  pressed shift-2
+- don't reset buttons upon key '0' (no answer), only after next question appeared
+
+- restore button states after serial disconnect (use new command 1,2,3,4..)
+- save/restore button states in/from save file
 - one second delay between question display and button activation
 - 1 second penalty if button pressed before activation
