@@ -223,6 +223,17 @@ void receiveCommand() {
     suppressAllButtons();
     Serial.println("A");
 
+  } else if(cmd >= '1' && cmd < '1' + PLAYERS ) {  // simulate button pushed
+    if(button == 0) {   // no button pressed yet
+      button = cmd - '1' + 1;
+      activateLamp(button-1);
+#if PLAYERS < 6
+      digitalWrite(ledPin, HIGH);
+#endif
+      Serial.println("A");
+    } else {
+      Serial.println("?");
+    }
   } else if(cmd == '\n' || cmd == '\r') {
     // ignore newline characters
   } else {
