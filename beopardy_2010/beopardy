@@ -412,40 +412,40 @@ if($#players>3){
 	@points=(0)x($#players+1);
 };
 sub scoreboard(){ # Scoreboard.
-my $sframe=$tl->Frame->pack(-side=>'top',-fill=>'x');
-my @pborder;
-my @pframes;
-my @pnames;
-my @pscores;
+    my $sframe=$tl->Frame->pack(-side=>'top',-fill=>'x');
+    my @pborder;
+    my @pframes;
+    my @pnames;
+    my @pscores;
 
-for (1..$#players){
-	if ($_ == $#players){
-		$pborder[$_]=$sframe;
-	}else{
-		$pborder[$_]=$sframe->Frame->pack(
-				-side	=>'left',
-				-fill	=>'x',
-				-expand	=>1,
-		);
-	};
+    for (1..$#players){
+        if ($_ == $#players){
+            $pborder[$_]=$sframe;
+        }else{
+            $pborder[$_]=$sframe->Frame->pack(
+                    -side	=>'left',
+                    -fill	=>'x',
+                    -expand	=>1,
+            );
+        };
 
-	$pframes[$_]=$pborder[$_]->Label( -relief=>'ridge')->pack( -side=>'left');
-	$pnames[$_] =$pframes[$_]->Label(
-			-width		=>$namewidth,
-			-font		=> $sfont,
-			-anchor		=>'w',
-			-textvar	=> \$players[$_],
-			-background	=> $colors[$_],
-			-foreground	=> "white",
-	)->pack;
-	$pscores[$_]=$pframes[$_]->Label(
-			-textvar	=> \$points[$_],
-			-font		=> $sfont,
-			-anchor		=>'e',
-	)->pack(-fill=>'x');
-};
-print SAV "[ply] ",join("/",@players),"\n";
-return $sframe;
+        $pframes[$_]=$pborder[$_]->Label( -relief=>'ridge')->pack( -side=>'left');
+        $pnames[$_] =$pframes[$_]->Label(
+                -width		=>$namewidth,
+                -font		=> $sfont,
+                -anchor		=>'w',
+                -textvar	=> \$players[$_],
+                -background	=> $colors[$_],
+                -foreground	=> "white",
+        )->pack;
+        $pscores[$_]=$pframes[$_]->Label(
+                -textvar	=> \$points[$_],
+                -font		=> $sfont,
+                -anchor		=>'e',
+        )->pack(-fill=>'x');
+    };
+    print SAV "[ply] ",join("/",@players),"\n";
+    return $sframe;
 };
 
 #print "Board done.\n";
