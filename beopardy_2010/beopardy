@@ -32,6 +32,7 @@ my $readfile;					# Should I read from a file?
 my $savefile=0;					# Should I save to a file?
 
 my $global_question_inhibit=0;
+my $global_pushbutton=0;        # 0: no button pressed, 1: pushbutton 1 pressed, etc.
 
 my $global_is_dbl=0;
 my $global_dbl_maxamt=0;
@@ -633,6 +634,7 @@ sub ser_SelectPly {
 	}else{
 		&ply_focus(".",$key);
 		&ser_dis;
+        $global_pushbutton=$key;
 	};
 };
 
@@ -777,6 +779,7 @@ sub ser_answerQuest {
 		$key=<Client>;
 	};
 	&mood("player $key");
+    $global_pushbutton=$key;
 	print "SER<: <$key>\n" if($debug);
 
 	&snd_stop if($snd_save);
@@ -1006,6 +1009,10 @@ sub ser_reset{
         # called directly
         $reset_command = $crap;
     }
+    if($global_pushbutton == 0 && $reset_command eq 'F') {
+        # 'False' command only valid if a pushbutton has been pressed
+        $reset_command = 'R';
+    }
 	print "Resetting (mode '" . ($reset_command || '') . "')...\n" if ($debug);
 
     # catch Tk callback cases
@@ -1036,6 +1043,7 @@ sub ser_reset{
 			};
 		};
 	}while($ok ne "A");
+    $global_pushbutton=0;
 	print "...done\n" if ($debug);
 	$reset->grabRelease;
 	$reset->withdraw;
