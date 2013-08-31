@@ -1,3 +1,4 @@
+# vim :set fileencoding=utf-8
 >category1
 
 1946
@@ -25,12 +26,12 @@ Hau drüber
 Hau weg
 Hau ab
 
->category4
+>Gürtel
 Gross
 Klein
 Dick
 Dünn
-Mager
+Komische Zeichen \N{PI}
 
 >category5
 7
