@@ -1,4 +1,5 @@
 ubuntu packages:
+    mplayer
     perl-tk
     libio-stty-perl
     libpoe-perl
