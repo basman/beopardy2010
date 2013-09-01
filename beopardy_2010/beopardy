@@ -786,12 +786,25 @@ sub ser_answerQuest {
 	my $key;
 	if($global_is_dbl==1){
 		$key=$global_dbl_ply;
+
+        # let client know who has the tag
+        &ser_dis;
+        print Client "$key\n";
+	    print "SER>: <$key>\n" if($debug);
+		my $ok=<Client>;
+        &ser_fatal(_("Serielle Verbindung unterbrochen").".") unless $ok;
+        print "SER<: <$ok>\n" if($debug);
+		$ok=~s/\r?\n//;
+		if ($ok ne "A"){
+            &ser_fatal("ser_reset got $ok");
+        }
+        &ser_en($crap,$c,$f);
 	}else{
 		$key=<Client>;
+	    print "SER<: <$key>\n" if($debug);
 	};
 	&mood("player $key");
     $global_pushbutton=$key;
-	print "SER<: <$key>\n" if($debug);
 
 	&snd_stop if($snd_save);
 
@@ -1053,6 +1066,8 @@ sub ser_reset{
 				&ser_fatal("ser_reset got $ok");
 			};
 		};
+# disabled, as it hides state discrepancies between board and client
+#        $reset_command = 'R'; # always retry using full reset
 	}while($ok ne "A");
     $global_pushbutton=0;
 	print "...done\n" if ($debug);
@@ -1170,8 +1185,11 @@ sub enterdbl {
 	my $br=$bframe->Button(
 			-text		=> _('Ok'),
 			-command	=> sub{
-#							printf("reenter selQ?");
-							&selectQuest($crap,$c,$f,$ich);
+                                if($global_dbl_ply) {
+    							    &selectQuest($crap,$c,$f,$ich);
+                                } else {
+                                    print "WARN: can't begin double jeopardy question with no choosen player\n";
+                                }
 							},
 	)->pack(-fill	=>'x', -expand => 1);
 
