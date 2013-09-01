@@ -770,10 +770,10 @@ sub selectQuest{
 
 	$tl->waitVisibility; # To fix stacking order
 	&mood("question");
-    &ser_reset('R');
 	if($global_is_dbl){
 		$tl->afterIdle(sub {&ser_answerQuest($tl,$c,$f) if ($tty);});
 	}else{
+        &ser_reset('R');
 		$tl->afterIdle(sub {&ser_en($tl,$c,$f) if ($tty);}); # fix Bug#2
 	};
 };
