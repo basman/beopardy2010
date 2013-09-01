@@ -1,6 +1,9 @@
-- don't reset buttons upon key '0' (no answer), only after next question appeared
-
 - restore button states after serial disconnect (use new command 1,2,3,4..)
 - save/restore button states in/from save file
 - one second delay between question display and button activation
 - 1 second penalty if button pressed before activation
+
+- entering player number for 'right answer' on the keyboard will leave all
+  buttons active, despite the corresponding button should be sent to the
+  Client. This is ok, because entering results manually means buttons are not
+  used anyway.

@@ -958,9 +958,14 @@ sub answerQuest{
 		};
 		if ($key <= $#players){
 			&updPlayfield($c,$f,$key,$sgn);
-			$crap->destroy if ($sgn>0);
-			&ser_reset($sgn>0 ? 'R' : 'F') if ($tty);
-			$button[$c][$f]->focusForce if ($force && ($sgn>0));
+            if($sgn>0) {
+			    $crap->destroy;
+			    $button[$c][$f]->focusForce if ($force);
+            } elsif($sgn==0) {
+                &ser_reset('N') if($tty);
+            } elsif($sgn<0) {
+			    &ser_reset('F') if($tty);
+            }
 #			&snd_stop(0);
 			return;
 		};
