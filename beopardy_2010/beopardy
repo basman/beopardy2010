@@ -582,7 +582,7 @@ sub ser_PlyEn {
 		$dlgbtn->focus;
 		$dlgbtn->focusForce;
 	}else{
-		die "ser_en: $_[0]\n";
+		die "ser_PlyEn: $_[0]\n";
 	};
 	&mood("setup 0");
 };
@@ -940,8 +940,9 @@ sub answerQuest{
 	};
 	&snd_stop() if ($key eq "0"); # XXX
 	my $pos;
+    # decode manual input
 	$key=-$pos if (($pos=index('0!"#$%&/()',$key))>0);
-	$key=-3  if($key eq '§');
+	$key=-3  if($key eq '§'); # Be nice on german-kbd (shift 3)
 	$key="0" if($key eq "`"); # Be nice on ami-kbd
 	$key="0" if($key eq "^"); # Be nice on german-kbd
 
