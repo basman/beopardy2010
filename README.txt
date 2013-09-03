@@ -13,7 +13,7 @@ arduino         - the firmware for the Arduino Nano, controlling the
                   serial port to the PC/laptop running beopardy_2010
 
 beopardy_2010   - the Jeopardy game software, written in Perl+Tk
-                  This program displayes the game board and implements
+                  This program displays the game board and implements
                   the game.
 
 hardware        - the game controller for push buttons and their lamps
@@ -21,11 +21,12 @@ hardware        - the game controller for push buttons and their lamps
 
 References:
 
-The old 2006 post by Sec:
-http://blogmal.42.org/misc/beopardy-2006.story
-
-The 2010 update by Sec:
+The code this fork is based on:
 http://blogmal.42.org/misc/beopardy-2010.story
+
+The legacy code with the different versions used at the CCC throughout the
+years:
+https://github.com/Sec42/beopardy-legacy
 
 The new web based beopardy by Sec:
 https://github.com/Sec42/beopardy
