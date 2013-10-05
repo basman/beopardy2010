@@ -1,0 +1,198 @@
+#!/usr/bin/perl -w
+
+# This code is under the BSD Licence
+# (c) by Roman `basman` Hoog Antink <rha_github@disconnect.ch>
+
+# TODO implement USB/serial device detection
+# TODO implement opening /dev/ttyUSB0 (use $ttypattern)
+# TODO implement forwarding of information between hardware and beopardy
+# TODO allow grouping of buttons
+# TODO allow renumbering of buttons
+# TODO statefull hardware disconnection recovery
+
+use v5.14;
+use strict;
+use POSIX;
+
+$|=1;
+
+use POE qw(Wheel::SocketFactory Wheel::ReadWrite Driver::SysRW Filter::Stream Wheel::Run);
+use IO::Socket::INET;
+
+my $port = 32002;
+my $ttypattern = qr(/dev/ttyUSB\d+);
+
+#==============================================================================
+# Start the Session, which will fire off the _start event and begin
+# the connection.
+
+POE::Session->create
+  ( 
+    # link events to actions
+	inline_states => {
+	_start => \&session_start,
+    _stop  => \&session_stop,
+
+    accept_success => \&session_b_connect_success,
+    accept_failure => \&session_b_connect_failure,
+
+    hw_open_success => \&session_hw_connected,
+    hw_open_failure => \&session_hw_failure,
+
+    hw_input   => \&session_hw_input,
+    hw_error   => \&session_hw_error,
+
+    b_socket_input    => \&session_b_socket_input,
+    b_socket_error    => \&session_b_socket_error,
+	},
+  );
+
+$poe_kernel->run();
+
+exit;
+
+#------------------------------------------------------------------------------
+# POE startup
+sub session_start {
+    # open listening socket for beopardy core
+    my ($kernel, $heap, $connected_socket) = @_[KERNEL, HEAP, ARG0];
+    $heap->{connector} = POE::Wheel::SocketFactory->new (
+      BindAddress   => '127.0.0.1',
+      BindPort      => $port,
+      SuccessEvent  => 'accept_success',
+      FailureEvent  => 'accept_failure',
+      Reuse         => 'yes',
+    );
+ 
+    # initiate USB/serial connection
+    # TODO
+}
+
+#------------------------------------------------------------------------------
+# incoming connection from beopardy
+sub session_b_connect_success {
+    my ($heap, $kernel, $connected_socket) = @_[HEAP, KERNEL, ARG0];
+    $heap->{socket_wheel} = POE::Wheel::ReadWrite->new (
+      Handle => $connected_socket,
+      Driver => POE::Driver::SysRW->new,
+      Filter => POE::Filter::Stream->new,
+      InputEvent => 'b_socket_input',
+      ErrorEvent => 'b_socket_error',
+    );
+}
+
+#------------------------------------------------------------------------------
+# The Socket somehow failed.  Close down everything so that POE will reap
+# the session and exit.
+sub session_b_connect_failure {
+  my ($heap, $operation, $errnum, $errstr) = @_[HEAP, ARG0, ARG1, ARG2];
+  print "!!! Accepting: $operation error $errnum: $errstr\n";
+  delete $heap->{connector};
+  delete $heap->{run_wheel};
+  delete $heap->{socket_wheel};
+}
+
+
+#------------------------------------------------------------------------------
+# reading from beopardy failed
+sub session_b_socket_error {
+    die "beopardy disconnected (recovery not yet implemented)";   
+}
+
+
+#------------------------------------------------------------------------------
+# we received input from beopardy
+sub session_b_socket_input {
+    my ($kernel, $heap, $input) = @_[KERNEL, HEAP, ARG0];
+    print "Beopardy says:",$input,"\n";
+    # TODO forward input to all hardware controllers
+    # TODO track button/lamp state
+}
+
+#------------------------------------------------------------------------------
+# received input from hardware
+sub session_hw_input {
+    my ($kernel, $heap, $input) = @_[KERNEL, HEAP, ARG0];
+    print "Hardware says:",$input,"\n";
+    # TODO forward input to beopardy
+    # TODO track button/lamp state
+}
+
+#------------------------------------------------------------------------------
+# hardware has been detected and opened
+sub session_hw_connected {
+    die "new hardware connected";
+}
+
+#------------------------------------------------------------------------------
+# hardware open() failed
+sub session_hw_failure {
+    die "opening hardware failed";
+}
+
+#------------------------------------------------------------------------------
+sub session_hw_error {
+# we received an error while reading from the hardware
+    die "hardware read error";
+}
+
+#------------------------------------------------------------------------------
+# The session has stopped.  Delete the wheels once again, just for
+# redundancy's sake.
+sub session_stop {
+  my $heap = $_[HEAP];
+  delete $heap->{connector};
+  delete $heap->{run_wheel};
+  delete $heap->{socket_wheel};
+}
+
+sub ser_connect {
+        # look for arduino buzzer controller through /dev/ttyUSB0..9
+        my $tty_base = "/dev/ttyUSB";
+        my $tty_file = $tty_base;
+        for(my $i=0; $i<10 && ! -e $tty_file; $i++) {
+            $tty_file = "$tty_base$i";
+        }
+        if(!-e $tty_file) {
+            die "serial port ${tty_base}0..9 not found";
+        }
+
+		open(Client, "+<", $tty_file) || die "open: $!";
+		use IO::Stty;
+#		IO::Stty::stty(\*Client,"-crtscts");
+		IO::Stty::stty(\*Client,"9600");
+		IO::Stty::stty(\*Client,"-echo");
+		IO::Stty::stty(\*Client,"-icrnl");
+        print "opened $tty_file\n";
+
+        &ser_startup(); # wait for arduino to become ready
+}
+
+sub ser_startup {
+# wait for arduino to become ready
+    my $retry = 8;
+    my $ok = '';
+
+    print "waiting 2 seconds for game controller...";
+    sleep(1);
+    print "done\n";
+    while($ok ne 'A' && $retry-- > 0) {
+        sleep(1);
+        &ser_dis;
+        print Client "R\r\n";
+        Client->flush();
+        print "SER>: R\n";
+        $ok=<Client>;
+        if(!$ok) {
+            die("serial communication disrupted");
+        }
+	    print "SER<: <$ok>\n";
+		$ok=~s/\r?\n//;
+    }
+
+    if(!$retry) {
+        &ser_fatal("ser_startup failed");
+    } else {
+        print "game controller is responsive.\n";
+    }
+}
