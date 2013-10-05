@@ -20,6 +20,7 @@ use FileHandle;
 use Getopt::Std;
 use IO::Handle;
 use Encode;
+use Time::HiRes;
 use open qw( :encoding(UTF-8) :std ); # every opened file is UTF-8
 use utf8;                             # this source code is UTF-8
 
@@ -195,15 +196,34 @@ if ($tty){
 
 my $snd_save; # resume sound..
 if($soundd){
-		my $port = 32001;
-		my $proto = getprotobyname('tcp');
-		socket(Soundd, PF_INET, SOCK_STREAM, $proto)	|| die "socket: $!";
+	print "Connecting to sound daemon\n";
+    my $port = 32001;
+    my $proto = getprotobyname('tcp');
+    socket(Soundd, PF_INET, SOCK_STREAM, $proto)	|| die "socket: $!";
 
-		my $iaddr   = inet_aton("localhost");
-		my $paddr   = sockaddr_in($port, $iaddr);
-		$proto   = getprotobyname('tcp');
-		connect(Soundd, $paddr)							|| die "connect to sound server failed: $!";
-		autoflush Soundd;
+    my $iaddr   = inet_aton("localhost");
+    my $paddr   = sockaddr_in($port, $iaddr);
+    if(!connect(Soundd, $paddr)) {
+        say "could not connect to sound daemon: $!" if($debug);
+        print "starting sound daemon...";
+        my $soundpid = fork();
+        die "could not fork soundd: $!" if($soundpid < 0);
+        if($soundpid) {    # parent
+            my $retry;
+            for($retry=200; $retry > 0; $retry--) {
+                connect(Soundd, $paddr) && last;
+                sleep(0.01);
+            }
+            if($retry <= 0) {
+                die "failed: $!";
+            }
+            say "connected";
+        } else {        # child
+            exec('./soundd');
+            die "exec(./soundd) failed: $!";
+        }
+    }
+	autoflush Soundd;
 };
 &snd_stop(0); # Just to make sure, and to install snd_eat.
 &mood("boot");
