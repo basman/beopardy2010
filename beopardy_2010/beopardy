@@ -239,13 +239,13 @@ sub load_category{
 			}
 		} else {
 			# check referenced media files
-			if ($_ =~ /^\[(img|snd):(.*?)\]\s*/){
+			if ($_ =~ /\[(img|snd):(.*?)\]\s*/){
 				if(! -e "$full_cat_dir/$2" and ! (-e "$full_cat_dir/$2.xpm" and $1 eq 'img')) {
 					die "media file $full_cat_dir/$2 not found (required by $full_cat_dir/q.txt)";
 				}
 
 				# prepend directory path
-				$_ =~ s/^\[(img|snd):(.*?)\].*/[$1:$full_cat_dir\/$2]/;
+				$_ =~ s/\[(img|snd):(.*?)\].*/[$1:$full_cat_dir\/$2]/;
 			}
 
 			$_.=" ";
