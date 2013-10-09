@@ -20,7 +20,7 @@ use POE qw(Wheel::SocketFactory Wheel::ReadWrite Driver::SysRW Filter::Stream Wh
 use IO::Socket::INET;
 
 my $port = 32002;
-my $ttypattern = qr(/dev/ttyUSB\d+);
+my @ttypattern = ('/dev/ttyUSB[0-9]*');
 
 #==============================================================================
 # Start the Session, which will fire off the _start event and begin
@@ -29,22 +29,23 @@ my $ttypattern = qr(/dev/ttyUSB\d+);
 POE::Session->create
   ( 
     # link events to actions
-	inline_states => {
-	_start => \&session_start,
+    inline_states => {
+    _start => \&session_start,
     _stop  => \&session_stop,
 
     accept_success => \&session_b_connect_success,
     accept_failure => \&session_b_connect_failure,
 
-    hw_open_success => \&session_hw_connected,
-    hw_open_failure => \&session_hw_failure,
+    hw_found => \&session_hw_found,
 
-    hw_input   => \&session_hw_input,
-    hw_error   => \&session_hw_error,
+    hw_input => \&session_hw_input,
+    hw_error => \&session_hw_error,
 
-    b_socket_input    => \&session_b_socket_input,
-    b_socket_error    => \&session_b_socket_error,
-	},
+    b_socket_input => \&session_b_socket_input,
+    b_socket_error => \&session_b_socket_error,
+
+    scan_hardware  => \&scan_hardware,
+    },
   );
 
 $poe_kernel->run();
@@ -64,8 +65,45 @@ sub session_start {
       Reuse         => 'yes',
     );
  
-    # initiate USB/serial connection
-    # TODO
+    # look for awailable hardware
+    $kernel->yield("scan_hardware");
+}
+
+#------------------------------------------------------------------------------
+# look for new device files (hardware that has been connected since last scan)
+sub scan_hardware {
+    my ($heap, $kernel, $dummy) = @_[HEAP, KERNEL, ARG0];
+
+    for my $pattern (@ttysocket) {
+        for my $file (glob($pattern)) {
+	    next if(exists $heap->{hw_files}{$file});
+	    # trigger open hardware
+	    $kernel->yield("hw_found", $file);
+	}
+    }
+
+    # trigger next scan
+    $kernel->delay("scan_hardware", 1);
+}
+
+#------------------------------------------------------------------------------
+# open hardware, detected by scan_hardware
+sub session_hw_found {
+    my ($heap, $kernel, $device_file) = @_[HEAP, KERNEL, ARG0];
+    my $fh;
+    $fh = IO::File->new($device_file, '+<');
+    if(!defined $fh) {
+	say STDERR "could not open device $device_file: $!";
+	return;
+    }
+    # create non blocking IO handler
+# TODO store wheel's ID, so we can pick it up on read failure
+    my $heap->{hw_files}{$device_file} = 
+	POE::Wheel::ReadWrite->new(
+	    Handle => $fh,
+	    InputEvent => 'hw_input',
+	    ErrorEvent => 'hw_error',
+	);
 }
 
 #------------------------------------------------------------------------------
@@ -112,27 +150,19 @@ sub session_b_socket_input {
 #------------------------------------------------------------------------------
 # received input from hardware
 sub session_hw_input {
-    my ($kernel, $heap, $input) = @_[KERNEL, HEAP, ARG0];
-    print "Hardware says:",$input,"\n";
+    my ($kernel, $heap, $input, $wheel_id) = @_[KERNEL, HEAP, ARG0, ARG1];
+    print "Hardware $wheel_id says:",$input,"\n";
     # TODO forward input to beopardy
     # TODO track button/lamp state
 }
 
 #------------------------------------------------------------------------------
-# hardware has been detected and opened
-sub session_hw_connected {
-    die "new hardware connected";
-}
-
-#------------------------------------------------------------------------------
-# hardware open() failed
-sub session_hw_failure {
-    die "opening hardware failed";
-}
-
-#------------------------------------------------------------------------------
+# hardware IO failure
 sub session_hw_error {
-# we received an error while reading from the hardware
+    my ($kernel, $heap) = @_[KERNEL, HEAP];
+    my ($operation, $errnum, $errstr, $id) = @_[ARG0..ARG3];
+    # we received an error while reading from the hardware
+    # TODO remove $heap->{}
     die "hardware read error";
 }
 
@@ -141,6 +171,7 @@ sub session_hw_error {
 # redundancy's sake.
 sub session_stop {
   my $heap = $_[HEAP];
+# TODO what is missing here? what is obsolete (from soundd)?
   delete $heap->{connector};
   delete $heap->{run_wheel};
   delete $heap->{socket_wheel};
