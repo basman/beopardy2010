@@ -49,7 +49,7 @@ int ledPin = 13; // indicator for "button has been pushed"
 #endif
 
 bool asyncMode = true;      // sync mode: PC polls board for buttons; async mode: board sends buttons anytime
-int button = 0;                // indicates which button was pressed first, or zero if no button pressed yet
+int button = 0;                // indicates which button was pressed first, or zero if no button pressed yet, or -1 if buttons inactive by command 'N'
 int debounceCounters[PLAYERS]; // debounce counters for each button
 unsigned char suppressedButtons;     // bitmask that indicates suppressed buttons (player gave wrong answer)
 
@@ -195,7 +195,7 @@ void receiveCommand() {
       Serial.println(bitmask2button(curButtons));
     }
 
-  } else if(cmd == 'O' && button != 0) { // oops, button pressed accidentially - partial reset
+  } else if(cmd == 'O' && button > 0) { // oops, button pressed accidentially - partial reset
     int curButtons = currentButtons();
     if(curButtons == 0) {
       button = 0;
@@ -206,7 +206,7 @@ void receiveCommand() {
       Serial.println(bitmask2button(curButtons));
     }
 
-  } else if(cmd == 'F' && button != 0) { // answer was incorrect, ignore active button
+  } else if(cmd == 'F' && button > 0) { // answer was incorrect, ignore active button
     int curButtons = currentButtons();
     if(curButtons == 0) {
       suppressButton(button);
@@ -220,11 +220,13 @@ void receiveCommand() {
 
   } else if(cmd == 'N') {  // silence all lamps and buttons
     resetLamps();
-    suppressAllButtons();
+    // DISABLED because the sequence R,N,1,F would leave all buttons suppressed
+    //suppressAllButtons();
+    button = -1; // disable buttons without messing with suppressedButtons
     Serial.println("A");
 
   } else if(cmd >= '1' && cmd < '1' + PLAYERS ) {  // simulate button pushed
-    if(button == 0) {   // no button pressed yet
+    if(button <= 0) {   // no button pressed yet
       button = cmd - '1' + 1;
       activateLamp(button-1);
 #if PLAYERS < 6
