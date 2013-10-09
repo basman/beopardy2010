@@ -5,9 +5,9 @@ Beschreibung der Fileformate:
 Enthalten pro Zeile einen Kategorienamen (ohne >)
 Beliebig viele Kategorien möglich.
 
-+Fragenfile "Jeopardy"
++Fragenfile "questions/KATEGORIE/q.txt"
 
-Jede Kategorie beginnt mit ">Kategoriename"
+Jedes q.txt beginnt mit ">Kategoriename"
 Darauf folgen 5 Zeilen mit je einer der (sichtbaren) Antworten.
 Es können beliebig viele Zeilen mit "#" am Anfang eingefügt werden. Z.B mit
 den dazugehörigen Fragen.
@@ -20,7 +20,7 @@ In den Antworten gültige Sonderzeichen: "\n" für Zeilenumbruch.
 
 [NOTE] Wenn kein \n vorkommt, versucht beopardy selbst sinnvoll
        Zeilenumbrüche einzustreuen.
-[NOTE] Bilder müssen als .xpm im img/-Verzeichniss liegen.
-
+[NOTE] Bilder und Soundfiles müssen im selben Verzeichnis liegen wo
+       das zugehörige q.txt ist.
 [NOTE] Anzahl der Fragen/Kategorie ist (nur) im Source konfigurierbar.
 
