@@ -210,36 +210,55 @@ if($soundd){
 
 print "Reading questions....\n";
 my %jdata;
-open (J,"<Jeopardy") || die "open file 'Jeopardy' failed: $!";
-my ($nam,$c);
-while (<J>){
-	chomp;
-	next if ((!defined $nam) && (!/^>/));
-	next if /^\s*(#|$)/;
-	if (/^>(.*)/){
-		if(defined $nam){
-			printf "%-20s:%2d\n",$nam,$c if ($debug);
-		};
-		$nam=$1;
-		$c=0;
-		next;
-	}
-	$_.=" ";
-	if (!s/(?<!\\)\\n/\n/g){
-		s/(.{10,$qwidth})\s+/$1\n/mg;
-	};
-	s/\\\\/\\/mg;
-	$jdata{$nam}[++$c]=$_;
-};
-close(J);
-printf "%-20s:%2d\n",$nam,$c if ($debug);
-
-print "Totalling ",(scalar keys %jdata)," categories.\n";
 
 sub logname{
 	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
 	$year+=1900;$mon++;
 	return (sprintf "%04d%02d%02d.%02d%02d",$year,$mon,$mday,$hour,$min);
+}
+
+sub load_category{
+	my ($cat_dir, $gamefile) = @_;
+	my $full_cat_dir = "questions/$cat_dir";
+	if(!-d $full_cat_dir) {
+		die "category directory $full_cat_dir not found (required by $gamefile)";
+	}
+	if(!-e "$full_cat_dir/q.txt") {
+		die "category file $full_cat_dir/q.txt not found (required by $gamefile)";
+	}
+	open(C, '<', "$full_cat_dir/q.txt") || die "could not open $full_cat_dir/q.txt: $!";
+	my $cat_name = $cat_dir;
+	my $c = 0;
+	while(<C>) {
+		next if /^\s*(#|$)/;
+		chomp;
+		if(/^>(.*)/) {
+			$cat_name = $1;
+			if(exists $jdata{$cat_name}) {
+				die "gamefile $gamefile uses duplicate category names: $cat_name ($full_cat_dir)";
+			}
+		} else {
+			# check referenced media files
+			if ($_ =~ /^\[(img|snd):(.*?)\]\s*/){
+				if(! -e "$full_cat_dir/$2" and ! (-e "$full_cat_dir/$2.xpm" and $1 eq 'img')) {
+					die "media file $full_cat_dir/$2 not found (required by $full_cat_dir/q.txt)";
+				}
+
+				# prepend directory path
+				$_ =~ s/^\[(img|snd):(.*?)\].*/[$1:$full_cat_dir\/$2]/;
+			}
+
+			$_.=" ";
+			if (!s/(?<!\\)\\n/\n/g){
+				s/(.{10,$qwidth})\s+/$1\n/mg;
+			};
+			s/\\\\/\\/mg;
+			$jdata{$cat_name}[++$c]=$_;
+
+		}
+	}
+	close(C);
+	return $cat_name;
 }
 
 sub read_game{
@@ -261,6 +280,8 @@ sub read_game{
 
 	my $p=0;
 	for (@Cat){
+		my $real_category_name = load_category($_, $gamefile);
+		$_ = $real_category_name;
 		printf "%-20s:%2d\n",$_,$#{$jdata{$_}} if ($debug);
 		if ($#{$jdata{$_}} < $q){
 			print "ERROR: not enough questions in \"$_\"\n";
@@ -290,6 +311,7 @@ sub read_game{
 
 # Titel und Fragen
 my ($title,@Cat)=&read_game($q);
+print "Totalling ",(scalar keys %jdata)," categories.\n";
 
 my @players;
 if ($#ARGV>0){
@@ -700,18 +722,17 @@ sub selectQuest{
 	$typ="";
 	print $jdata{$Cat[$c]}[$f]," <-\n" if($debug);
 	if ($jdata{$Cat[$c]}[$f] =~ /^\[(img|snd):(.*?)\]\s*/){
-#		print "JA\n";
 		$typ=$1;$fnam=$2;
-		print "This is of $typ - \'$2\'\n";
+		print "This is of type $typ - \'$fnam\'\n";
 		if($typ eq "img"){
 			if(!defined($imgcache{$fnam})){
-				if(-f "img/".$fnam){
-					$imgcache{$fnam} = $tl->Photo($fnam,-file => "img/".$fnam);
-                }elsif(-f "img/".$fnam.".xpm") {
+				if(-f $fnam){
+					$imgcache{$fnam} = $tl->Photo($fnam,-file => $fnam);
+                }elsif(-f $fnam.".xpm") {
                     # for backwards compatibility to old Jeopardy img format without file suffix
-                    $imgcache{$fnam} = $tl->Pixmap($fnam,-file => "img/".$fnam.".xpm");
+                    $imgcache{$fnam} = $tl->Pixmap($fnam,-file => $fnam.".xpm");
 				}else{
-					print "img/".$fnam." not found\n";
+					print $fnam." not found\n";
 				};
 			};
 		};

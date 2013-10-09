@@ -183,7 +183,7 @@ sub session_run {
 
 
   $command=$trans{$command}if(defined $trans{$command});
-  $command="snd/".$command;
+  $command="snd/".$command if(!-e $command); # for system sounds (intro & think)
 
   if($command=~/\.wav$/){
 	  $prg="/usr/local/bin/playwave";
