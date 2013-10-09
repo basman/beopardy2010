@@ -1,0 +1,7 @@
+# vim :set fileencoding=utf-8
+>Erben
+Recht
+Knecht
+Boss
+Frist
+Anteil

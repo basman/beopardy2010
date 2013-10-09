@@ -1,0 +1,7 @@
+# vim :set fileencoding=utf-8
+>Bauen
+Haus
+Wohnung
+Garten
+Garage
+Bauherr
