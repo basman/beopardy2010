@@ -123,6 +123,9 @@ sub session_hw_found {
     IO::Stty::stty(\*$fh,"-echo");
     IO::Stty::stty(\*$fh,"-icrnl");
 
+    # wait for hardware to become ready
+    sleep 2;
+
     # create non blocking IO handler
     my $wheel = 
 	POE::Wheel::ReadWrite->new(
@@ -138,7 +141,7 @@ sub session_hw_found {
 
     say STDERR "opened $device_file (wheel ID $wheelID)";
 
-    $kernel->delay("hw_state_restore", 2, $wheelID);
+    $kernel->yield("hw_state_restore", $wheelID);
 }
 
 

@@ -20,7 +20,7 @@ use FileHandle;
 use Getopt::Std;
 use IO::Handle;
 use Encode;
-use Time::HiRes;
+use Time::HiRes qw( sleep );
 use open qw( :encoding(UTF-8) :std ); # every opened file is UTF-8
 use utf8;                             # this source code is UTF-8
 
@@ -168,8 +168,8 @@ if ($tty){
         if($hwpid) {    # parent
             my $retry;
             for($retry=200; $retry > 0; $retry--) {
+                sleep(0.4);
                 connect(Client, $paddr) && last;
-                sleep(0.01);
             }
             if($retry <= 0) {
                 die "failed: $!";
@@ -200,8 +200,8 @@ if($soundd){
         if($soundpid) {    # parent
             my $retry;
             for($retry=200; $retry > 0; $retry--) {
+                sleep(0.4);
                 connect(Soundd, $paddr) && last;
-                sleep(0.01);
             }
             if($retry <= 0) {
                 die "failed: $!";
