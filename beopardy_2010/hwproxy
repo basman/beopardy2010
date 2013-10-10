@@ -65,6 +65,12 @@ sub session_start {
       Reuse         => 'yes',
     );
  
+    # TODO initialise button mapping/grouping on POE heap, based on command line options
+    # we assume direct mapping of one single hardware controller and no grouping for now
+    # grouping means multiple buttons act as one. mapping means multiple hardware controllers
+    # are combined allowing more players, e.g. hardware 1 serves buttons 1-6 and hardware 2
+    # servers buttons 7-12.
+
     # look for awailable hardware
     $kernel->yield("scan_hardware");
 }
@@ -90,20 +96,22 @@ sub scan_hardware {
 # open hardware, detected by scan_hardware
 sub session_hw_found {
     my ($heap, $kernel, $device_file) = @_[HEAP, KERNEL, ARG0];
-    my $fh;
-    $fh = IO::File->new($device_file, '+<');
+    my $fh = IO::File->new($device_file, '+<');
     if(!defined $fh) {
 	say STDERR "could not open device $device_file: $!";
 	return;
     }
     # create non blocking IO handler
-# TODO store wheel's ID, so we can pick it up on read failure
-    my $heap->{hw_files}{$device_file} = 
+    my $wheel = 
 	POE::Wheel::ReadWrite->new(
 	    Handle => $fh,
 	    InputEvent => 'hw_input',
 	    ErrorEvent => 'hw_error',
 	);
+    my $wheelID = $wheel->ID;
+    $heap->{hw_files}{$device_file} = $wheel;		# lets us find wheel by device file
+    $heap->{hw_wheel_files}{$wheelID} = $device_file;	# lets us find device file by wheel ID (for error handler)
+    $heap->{hw_wheels}{$wheelID} = $wheel;		# lets us find wheel by wheel ID       (for error handler)
 }
 
 #------------------------------------------------------------------------------
