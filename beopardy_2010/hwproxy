@@ -3,16 +3,14 @@
 # This code is under the BSD Licence
 # (c) by Roman `basman` Hoog Antink <rha_github@disconnect.ch>
 
-# TODO implement USB/serial device detection
-# TODO implement opening /dev/ttyUSB0 (use $ttypattern)
-# TODO implement forwarding of information between hardware and beopardy
 # TODO allow grouping of buttons
-# TODO allow renumbering of buttons
+# TODO allow mapping of buttons
 # TODO statefull hardware disconnection recovery
 
 use v5.14;
 use strict;
 use POSIX;
+use Getopt::Long;
 
 $|=1;
 
@@ -21,6 +19,16 @@ use IO::Socket::INET;
 
 my $port = 32002;
 my @ttypattern = ('/dev/ttyUSB[0-9]*', '/dev/usbserial.*');
+
+my $debug = 0;
+my $help = 0;
+
+GetOptions('debug' => \$debug, 'tty' => \@ttypattern, 'help' => \$help) || exit 1;
+
+if ($help) {
+    help();
+    exit 0;
+}
 
 #==============================================================================
 # Start the Session, which will fire off the _start event and begin
@@ -33,18 +41,17 @@ POE::Session->create
     _start => \&session_start,
     _stop  => \&session_stop,
 
-    accept_success => \&session_b_connect_success,
-    accept_failure => \&session_b_connect_failure,
+    accept_success => \&session_software_connect_success,
+    accept_failure => \&session_software_connect_failure,
+    software_socket_input => \&session_software_socket_input,
+    software_socket_error => \&session_software_socket_error,
 
     hw_found => \&session_hw_found,
-
     hw_input => \&session_hw_input,
     hw_error => \&session_hw_error,
-
-    b_socket_input => \&session_b_socket_input,
-    b_socket_error => \&session_b_socket_error,
-
     scan_hardware  => \&scan_hardware,
+
+    hw_state_update => \&session_hw_state_update,
     },
   );
 
@@ -71,6 +78,9 @@ sub session_start {
     # are combined allowing more players, e.g. hardware 1 serves buttons 1-6 and hardware 2
     # servers buttons 7-12.
 
+    # initialise hardware state stack
+    @{$heap->{hw_state}} = ();
+
     # look for awailable hardware
     $kernel->yield("scan_hardware");
 }
@@ -80,9 +90,15 @@ sub session_start {
 sub scan_hardware {
     my ($heap, $kernel, $dummy) = @_[HEAP, KERNEL, ARG0];
 
-    for my $pattern (@ttysocket) {
+    say "scan_hardware: " if($debug);
+
+    for my $pattern (@ttypattern) {
         for my $file (glob($pattern)) {
-	    next if(exists $heap->{hw_files}{$file});
+	    if(exists $heap->{hw_files}{$file}) {
+		say "  $file (connected)" if($debug);
+		next;
+	    }
+	    say "  $file (closed)" if($debug);
 	    # trigger open hardware
 	    $kernel->yield("hw_found", $file);
 	}
@@ -98,7 +114,7 @@ sub session_hw_found {
     my ($heap, $kernel, $device_file) = @_[HEAP, KERNEL, ARG0];
     my $fh = IO::File->new($device_file, '+<');
     if(!defined $fh) {
-	say STDERR "could not open device $device_file: $!";
+	say STDERR "session_hw_found: could not open device $device_file: $!";
 	return;
     }
     # create non blocking IO handler
@@ -112,66 +128,125 @@ sub session_hw_found {
     $heap->{hw_files}{$device_file} = $wheel;		# lets us find wheel by device file
     $heap->{hw_wheel_files}{$wheelID} = $device_file;	# lets us find device file by wheel ID (for error handler)
     $heap->{hw_wheels}{$wheelID} = $wheel;		# lets us find wheel by wheel ID       (for error handler)
+
+    say STDERR "session_hw_found: opened $device_file (wheel ID $wheelID)";
 }
+
 
 #------------------------------------------------------------------------------
 # incoming connection from beopardy
-sub session_b_connect_success {
+sub session_software_connect_success {
     my ($heap, $kernel, $connected_socket) = @_[HEAP, KERNEL, ARG0];
+
+    # reap any existing socket
+    if(exists $heap->{socket_wheel}) {
+	$heap->{socket_wheel}->close;
+	delete $heap->{socket_wheel};
+	say STDERR "WARNING: closing existing software connection";
+    }
+
     $heap->{socket_wheel} = POE::Wheel::ReadWrite->new (
       Handle => $connected_socket,
       Driver => POE::Driver::SysRW->new,
       Filter => POE::Filter::Stream->new,
-      InputEvent => 'b_socket_input',
-      ErrorEvent => 'b_socket_error',
+      InputEvent => 'software_socket_input',
+      ErrorEvent => 'software_socket_error',
     );
+    say STDERR "incoming software connection";
 }
+
 
 #------------------------------------------------------------------------------
 # The Socket somehow failed.  Close down everything so that POE will reap
 # the session and exit.
-sub session_b_connect_failure {
-  my ($heap, $operation, $errnum, $errstr) = @_[HEAP, ARG0, ARG1, ARG2];
-  print "!!! Accepting: $operation error $errnum: $errstr\n";
-  delete $heap->{connector};
-  delete $heap->{run_wheel};
-  delete $heap->{socket_wheel};
+sub session_software_connect_failure {
+    my ($heap, $operation, $errnum, $errstr) = @_[HEAP, ARG0, ARG1, ARG2];
+    say STDERR "ERROR incoming software connection: $operation error $errnum: $errstr";
+    delete $heap->{connector};
+    delete $heap->{socket_wheel};
 }
 
 
 #------------------------------------------------------------------------------
 # reading from beopardy failed
-sub session_b_socket_error {
-    die "beopardy disconnected (recovery not yet implemented)";   
+sub session_software_socket_error {
+    my ($heap, $operation, $errnum, $errstr, $wheel_id) = @_[HEAP, ARG0, ARG1, ARG2, ARG3];
+    if($errnum == 0 and $operation eq 'read') {
+	say STDERR "WARNING: software disconnected";
+    } else {
+	say STDERR "ERROR software IO: $operation error $errnum: $errstr";
+    }
+    delete $heap->{socket_wheel};
 }
 
 
 #------------------------------------------------------------------------------
 # we received input from beopardy
-sub session_b_socket_input {
-    my ($kernel, $heap, $input) = @_[KERNEL, HEAP, ARG0];
-    print "Beopardy says:",$input,"\n";
-    # TODO forward input to all hardware controllers
-    # TODO track button/lamp state
+sub session_software_socket_input {
+    my ($kernel, $heap, $input, $wheel_id) = @_[KERNEL, HEAP, ARG0, ARG1];
+    print "BEOPARDY: $input";
+    # forward input to all hardware controllers
+    for my $hw_wheel_ID (sort keys %{$heap->{hw_wheels}}) {
+	my $hw_wheel = $heap->{hw_wheels}{$hw_wheel_ID};
+	$hw_wheel->put($input);
+	# TODO if command is a number (1..) or F (false), apply mapping and grouping
+    }
+
+    # track button/lamp state
+    $kernel->yield("hw_state_update", $input);
 }
 
 #------------------------------------------------------------------------------
 # received input from hardware
 sub session_hw_input {
-    my ($kernel, $heap, $input, $wheel_id) = @_[KERNEL, HEAP, ARG0, ARG1];
-    print "Hardware $wheel_id says:",$input,"\n";
-    # TODO forward input to beopardy
-    # TODO track button/lamp state
+    my ($kernel, $heap, $input, $wheelID) = @_[KERNEL, HEAP, ARG0, ARG1];
+
+    my $device_file = $heap->{hw_wheel_files}{$wheelID};
+
+    # forward input to beopardy
+    if(exists $heap->{socket_wheel}) {
+	$heap->{socket_wheel}->put($input);
+	print "HARDWARE $device_file/$wheelID: $input";
+    } else {
+	print STDERR "HARDWARE $device_file/$wheelID (software not connected!): $input";
+    }
+
+    chomp $input;
+    if($input =~ /^[0-9]+$/) {
+	# track button/lamp state transitions (consider actions only; ignore responses like 'A' and '?')
+	$kernel->yield("hw_state_update", $input);
+    }
 }
 
 #------------------------------------------------------------------------------
 # hardware IO failure
 sub session_hw_error {
-    my ($kernel, $heap) = @_[KERNEL, HEAP];
-    my ($operation, $errnum, $errstr, $id) = @_[ARG0..ARG3];
     # we received an error while reading from the hardware
-    # TODO remove $heap->{}
-    die "hardware read error";
+    my ($kernel, $heap) = @_[KERNEL, HEAP];
+    my ($operation, $errnum, $errstr, $wheelID) = @_[ARG0..ARG3];
+
+    my $wheel = $heap->{hw_wheels}{$wheelID};
+    my $device_file  = $heap->{hw_wheel_files}{$wheelID};
+
+    delete $heap->{hw_wheels}{$wheelID};
+    delete $heap->{hw_wheel_files}{$wheelID};
+    delete $heap->{hw_files}{$device_file};
+
+    say STDERR "WARNING: hardware $device_file disconnected (wheel $wheelID)";
+}
+
+
+#------------------------------------------------------------------------------
+# track hw state updates issued by beopardy software, so we can restore hw state
+# upon reconnection
+sub session_hw_state_update {
+    my ($kernel, $heap, $command) = @_[KERNEL, HEAP, ARG0];
+    chomp $command;
+    if($command eq 'R') {
+	# 'R' resets hardware completely
+	splice(@{$heap->{hw_state}});
+    }
+    push(@{$heap->{hw_state}}, $command);
 }
 
 #------------------------------------------------------------------------------
@@ -179,59 +254,64 @@ sub session_hw_error {
 # redundancy's sake.
 sub session_stop {
   my $heap = $_[HEAP];
-# TODO what is missing here? what is obsolete (from soundd)?
   delete $heap->{connector};
-  delete $heap->{run_wheel};
   delete $heap->{socket_wheel};
 }
 
-sub ser_connect {
-        # look for arduino buzzer controller through /dev/ttyUSB0..9
-        my $tty_base = "/dev/ttyUSB";
-        my $tty_file = $tty_base;
-        for(my $i=0; $i<10 && ! -e $tty_file; $i++) {
-            $tty_file = "$tty_base$i";
-        }
-        if(!-e $tty_file) {
-            die "serial port ${tty_base}0..9 not found";
-        }
-
-		open(Client, "+<", $tty_file) || die "open: $!";
-		use IO::Stty;
-#		IO::Stty::stty(\*Client,"-crtscts");
-		IO::Stty::stty(\*Client,"9600");
-		IO::Stty::stty(\*Client,"-echo");
-		IO::Stty::stty(\*Client,"-icrnl");
-        print "opened $tty_file\n";
-
-        &ser_startup(); # wait for arduino to become ready
+sub help {
+    say "usage: $0 [--help] [--debug] [--tty device1 [--tty device2, ...]]";
+    say "	help	show this help";
+    say "	debug	enable debug output";
+    say "	tty	specify hardware device file pattern(s)";
 }
 
-sub ser_startup {
-# wait for arduino to become ready
-    my $retry = 8;
-    my $ok = '';
-
-    print "waiting 2 seconds for game controller...";
-    sleep(1);
-    print "done\n";
-    while($ok ne 'A' && $retry-- > 0) {
-        sleep(1);
-        &ser_dis;
-        print Client "R\r\n";
-        Client->flush();
-        print "SER>: R\n";
-        $ok=<Client>;
-        if(!$ok) {
-            die("serial communication disrupted");
-        }
-	    print "SER<: <$ok>\n";
-		$ok=~s/\r?\n//;
-    }
-
-    if(!$retry) {
-        &ser_fatal("ser_startup failed");
-    } else {
-        print "game controller is responsive.\n";
-    }
-}
+#sub ser_connect {
+#        # look for arduino buzzer controller through /dev/ttyUSB0..9
+#        my $tty_base = "/dev/ttyUSB";
+#        my $tty_file = $tty_base;
+#        for(my $i=0; $i<10 && ! -e $tty_file; $i++) {
+#            $tty_file = "$tty_base$i";
+#        }
+#        if(!-e $tty_file) {
+#            die "serial port ${tty_base}0..9 not found";
+#        }
+#
+#		open(Client, "+<", $tty_file) || die "open: $!";
+#		use IO::Stty;
+##		IO::Stty::stty(\*Client,"-crtscts");
+#		IO::Stty::stty(\*Client,"9600");
+#		IO::Stty::stty(\*Client,"-echo");
+#		IO::Stty::stty(\*Client,"-icrnl");
+#        print "opened $tty_file\n";
+#
+#        &ser_startup(); # wait for arduino to become ready
+#}
+#
+#sub ser_startup {
+## wait for arduino to become ready
+#    my $retry = 8;
+#    my $ok = '';
+#
+#    print "waiting 2 seconds for game controller...";
+#    sleep(1);
+#    print "done\n";
+#    while($ok ne 'A' && $retry-- > 0) {
+#        sleep(1);
+#        &ser_dis;
+#        print Client "R\r\n";
+#        Client->flush();
+#        print "SER>: R\n";
+#        $ok=<Client>;
+#        if(!$ok) {
+#            die("serial communication disrupted");
+#        }
+#	    print "SER<: <$ok>\n";
+#		$ok=~s/\r?\n//;
+#    }
+#
+#    if(!$retry) {
+#        &ser_fatal("ser_startup failed");
+#    } else {
+#        print "game controller is responsive.\n";
+#    }
+#}
