@@ -20,7 +20,7 @@ use POE qw(Wheel::SocketFactory Wheel::ReadWrite Driver::SysRW Filter::Stream Wh
 use IO::Socket::INET;
 
 my $port = 32002;
-my @ttypattern = ('/dev/ttyUSB[0-9]*');
+my @ttypattern = ('/dev/ttyUSB[0-9]*', '/dev/usbserial.*');
 
 #==============================================================================
 # Start the Session, which will fire off the _start event and begin
