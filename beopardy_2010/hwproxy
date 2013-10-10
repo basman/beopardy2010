@@ -138,7 +138,7 @@ sub session_hw_found {
 
     say STDERR "opened $device_file (wheel ID $wheelID)";
 
-    $kernel->yield("hw_state_restore", $wheelID);
+    $kernel->delay("hw_state_restore", 2, $wheelID);
 }
 
 
@@ -150,15 +150,13 @@ sub session_hw_state_restore {
     say STDERR "session_hw_state_restore: pushing state stack (" . 
 	join(',', @{$heap->{hw_state}}) . ") to wheel $wheelID";
 
-    # inhibit forwarding hardware replies during state recovery
-    $heap->{hw_wheels_mute}{$wheelID} = 1;
-
     for my $command (@{$heap->{hw_state}}) {
-	$heap->{hw_wheels}{$wheelID}->put($command);
-    }
+	# inhibit forwarding hardware replies to beopardy during state recovery
+	$heap->{hw_wheels_mute}{$wheelID} += 1;
 
-    # unmute this hardware's wheel
-    $heap->{hw_wheels_mute}{$wheelID} = 0;
+	$heap->{hw_wheels}{$wheelID}->put($command);
+	say STDERR "  to HARDWARE wheel $wheelID: $command";
+    }
 }
 
 
@@ -235,11 +233,14 @@ sub session_hw_input {
     $input =~ s/[\r\n]*$//g;
     return if !$input; # ignore empty data
 
-    if($heap->{hw_wheels_mute}{$wheelID}) {
+    if($heap->{hw_wheels_mute}{$wheelID} > 0) {
 	# special handling during state recovery of freshly connected hardware
 	if($input ne 'A') {
 	    say STDERR "ERROR hardware state recovery: received $input (wheel $wheelID)";
+	} else {
+	    say STDERR "HARDWARE (muted; wheel $wheelID): $input";
 	}
+	--$heap->{hw_wheels_mute}{$wheelID};
 	return;
     }
 
