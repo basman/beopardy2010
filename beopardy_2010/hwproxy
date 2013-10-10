@@ -5,7 +5,6 @@
 
 # TODO allow grouping of buttons
 # TODO allow mapping of buttons
-# TODO statefull hardware disconnection recovery
 
 use v5.14;
 use strict;
@@ -51,7 +50,8 @@ POE::Session->create
     hw_error => \&session_hw_error,
     scan_hardware  => \&scan_hardware,
 
-    hw_state_update => \&session_hw_state_update,
+    hw_state_update  => \&session_hw_state_update,
+    hw_state_restore => \&session_hw_state_restore,
     },
   );
 
@@ -128,8 +128,31 @@ sub session_hw_found {
     $heap->{hw_files}{$device_file} = $wheel;		# lets us find wheel by device file
     $heap->{hw_wheel_files}{$wheelID} = $device_file;	# lets us find device file by wheel ID (for error handler)
     $heap->{hw_wheels}{$wheelID} = $wheel;		# lets us find wheel by wheel ID       (for error handler)
+    $heap->{hw_wheels_mute}{$wheelID} = 0;		# unmute the new wheel
 
     say STDERR "session_hw_found: opened $device_file (wheel ID $wheelID)";
+
+    $kernel->yield("hw_state_restore", $wheelID);
+}
+
+
+#------------------------------------------------------------------------------
+# push state stack to freshly opened hardware
+sub session_hw_state_restore {
+    my ($heap, $kernel, $wheelID) = @_[HEAP, KERNEL, ARG0];
+    return unless @{$heap->{hw_state}};
+    say STDERR "session_hw_state_restore: pushing state stack (" . 
+	join(',', @{$heap->{hw_state}}) . ") to wheel $wheelID";
+
+    # inhibit forwarding hardware replies during state recovery
+    $heap->{hw_wheels_mute}{$wheelID} = 1;
+
+    for my $command (@{$heap->{hw_state}}) {
+	$heap->{hw_wheels}{$wheelID}->put($command);
+    }
+
+    # unmute this hardware's wheel
+    $heap->{hw_wheels_mute}{$wheelID} = 0;
 }
 
 
@@ -200,6 +223,14 @@ sub session_software_socket_input {
 # received input from hardware
 sub session_hw_input {
     my ($kernel, $heap, $input, $wheelID) = @_[KERNEL, HEAP, ARG0, ARG1];
+
+    if($heap->{hw_wheels_mute}{$wheelID}) {
+	# special handling during state recovery of freshly connected hardware
+	if($input ne 'A') {
+	    say STDERR "ERROR hardware state recovery: received $input (wheel $wheelID)";
+	}
+	return;
+    }
 
     my $device_file = $heap->{hw_wheel_files}{$wheelID};
 
