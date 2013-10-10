@@ -48,7 +48,7 @@ POE::Session->create
     hw_found => \&session_hw_found,
     hw_input => \&session_hw_input,
     hw_error => \&session_hw_error,
-    scan_hardware  => \&scan_hardware,
+    scan_hardware  => \&session_scan_hardware,
 
     hw_state_update  => \&session_hw_state_update,
     hw_state_restore => \&session_hw_state_restore,
@@ -87,7 +87,7 @@ sub session_start {
 
 #------------------------------------------------------------------------------
 # look for new device files (hardware that has been connected since last scan)
-sub scan_hardware {
+sub session_scan_hardware {
     my ($heap, $kernel, $dummy) = @_[HEAP, KERNEL, ARG0];
 
     say "scan_hardware: " if($debug);
@@ -114,9 +114,15 @@ sub session_hw_found {
     my ($heap, $kernel, $device_file) = @_[HEAP, KERNEL, ARG0];
     my $fh = IO::File->new($device_file, '+<');
     if(!defined $fh) {
-	say STDERR "session_hw_found: could not open device $device_file: $!";
+	say STDERR "could not open device $device_file: $!";
 	return;
     }
+    use IO::Stty;
+#   IO::Stty::stty(\*$fh,"-crtscts");
+    IO::Stty::stty(\*$fh,"9600");
+    IO::Stty::stty(\*$fh,"-echo");
+    IO::Stty::stty(\*$fh,"-icrnl");
+
     # create non blocking IO handler
     my $wheel = 
 	POE::Wheel::ReadWrite->new(
@@ -125,12 +131,12 @@ sub session_hw_found {
 	    ErrorEvent => 'hw_error',
 	);
     my $wheelID = $wheel->ID;
-    $heap->{hw_files}{$device_file} = $wheel;		# lets us find wheel by device file
+    $heap->{hw_files}{$device_file} = $wheel;		# mark this device file as opened
     $heap->{hw_wheel_files}{$wheelID} = $device_file;	# lets us find device file by wheel ID (for error handler)
     $heap->{hw_wheels}{$wheelID} = $wheel;		# lets us find wheel by wheel ID       (for error handler)
     $heap->{hw_wheels_mute}{$wheelID} = 0;		# unmute the new wheel
 
-    say STDERR "session_hw_found: opened $device_file (wheel ID $wheelID)";
+    say STDERR "opened $device_file (wheel ID $wheelID)";
 
     $kernel->yield("hw_state_restore", $wheelID);
 }
@@ -207,7 +213,9 @@ sub session_software_socket_error {
 # we received input from beopardy
 sub session_software_socket_input {
     my ($kernel, $heap, $input, $wheel_id) = @_[KERNEL, HEAP, ARG0, ARG1];
-    print "BEOPARDY: $input";
+    $input =~ s/[\r\n]*$//g;
+    say "BEOPARDY: $input";
+
     # forward input to all hardware controllers
     for my $hw_wheel_ID (sort keys %{$heap->{hw_wheels}}) {
 	my $hw_wheel = $heap->{hw_wheels}{$hw_wheel_ID};
@@ -224,6 +232,9 @@ sub session_software_socket_input {
 sub session_hw_input {
     my ($kernel, $heap, $input, $wheelID) = @_[KERNEL, HEAP, ARG0, ARG1];
 
+    $input =~ s/[\r\n]*$//g;
+    return if !$input; # ignore empty data
+
     if($heap->{hw_wheels_mute}{$wheelID}) {
 	# special handling during state recovery of freshly connected hardware
 	if($input ne 'A') {
@@ -236,13 +247,12 @@ sub session_hw_input {
 
     # forward input to beopardy
     if(exists $heap->{socket_wheel}) {
-	$heap->{socket_wheel}->put($input);
-	print "HARDWARE $device_file/$wheelID: $input";
+	$heap->{socket_wheel}->put("$input\n");
+	say "HARDWARE $device_file (wheel $wheelID): $input";
     } else {
-	print STDERR "HARDWARE $device_file/$wheelID (software not connected!): $input";
+	say STDERR "HARDWARE $device_file/$wheelID (software not connected!): $input";
     }
 
-    chomp $input;
     if($input =~ /^[0-9]+$/) {
 	# track button/lamp state transitions (consider actions only; ignore responses like 'A' and '?')
 	$kernel->yield("hw_state_update", $input);
@@ -272,7 +282,13 @@ sub session_hw_error {
 # upon reconnection
 sub session_hw_state_update {
     my ($kernel, $heap, $command) = @_[KERNEL, HEAP, ARG0];
-    chomp $command;
+
+    if($command eq 'A' or $command eq '?') {
+	# ignore "non-commands"
+	die "this code should be dead";
+	return;
+    }
+
     if($command eq 'R') {
 	# 'R' resets hardware completely
 	splice(@{$heap->{hw_state}});
