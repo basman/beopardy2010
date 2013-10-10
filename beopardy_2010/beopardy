@@ -126,6 +126,7 @@ if($opt{r}){ # Read savefile
 };
 
 if ($tty){$splash=1};	# tty requires splash.
+if ($readfile){$splash=0};
 
 my $tl = MainWindow -> new -> toplevel;
 $tl->appname(beopardy);
