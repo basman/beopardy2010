@@ -706,7 +706,7 @@ sub selectQuest{
 	$tl->grab;
 
 	my $tlabel = $tl->Label(
-			-text	=> $Cat[$c],
+			-text	=> "$Cat[$c]  " . ($f*100),
 			-relief	=> 'ridge',
 			-font	=> $tfont,
 	) -> pack(-fill	=> 'x');
