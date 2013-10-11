@@ -1,4 +1,3 @@
-- restore button states after serial disconnect (use new command 1,2,3,4..)
 - save/restore button states in/from save file
 - one second delay between question display and button activation
 - 1 second penalty if button pressed before activation
@@ -11,3 +10,11 @@
 - false answer on double jeopardy does not enable all other buttons; in other
   words: serial commands R,1,F should enable buttons 2,3,4... (testing with raw
   arduino IDE, they do!)
+
+- hardware disconnect robustness:
+  1. start hwproxy and soundd
+  2. start ./beopardy -tdfy Test.jg
+  3. pick a question
+  4. kill and restart hwproxy
+  5. confirm serial fatal popup
+  beopardy will no longer receive data from hwproxy ($tl->fileevent has to be set again in sub ser_eat (overwritten in sub ser_fatal)?)
