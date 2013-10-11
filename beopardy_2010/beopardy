@@ -815,7 +815,8 @@ sub ser_answerQuest {
 		if ($ok ne "A"){
             &ser_fatal("ser_answerQuest[dbl] got $ok");
         }
-        &ser_en($crap,$c,$f);
+		# disabled to improve hardware disconnect robustness
+		#&ser_en($crap,$c,$f);
 	}else{
 		$key=<Client>;
         &ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_answerQuest)") unless $key;
