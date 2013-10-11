@@ -801,11 +801,11 @@ sub ser_answerQuest {
         print Client "$key\n";
 	    print "SER>: <$key>\n" if($debug);
 		my $ok=<Client>;
-        &ser_fatal(_("Serielle Verbindung unterbrochen").".") unless $ok;
+        &ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_answerQuest[dbl])") unless $ok;
         print "SER<: <$ok>\n" if($debug);
 		$ok=~s/\r?\n//;
 		if ($ok ne "A"){
-            &ser_fatal("ser_reset got $ok");
+            &ser_fatal("ser_answerQuest[dbl] got $ok");
         }
         &ser_en($crap,$c,$f);
 	}else{
@@ -1042,7 +1042,7 @@ sub ser_reset{
 		Client->flush();
 		print "SER>: $reset_command\n" if($debug);
 		$ok=<Client>;
-		&ser_fatal(_("Serielle Verbindung unterbrochen").".") unless $ok;
+		&ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_reset)") unless $ok;
 		print "SER<: <$ok>\n" if($debug);
 		$ok=~s/\r?\n//;
 		if ($ok ne "A"){
@@ -1067,7 +1067,7 @@ sub ser_reset{
 };
 
 sub ser_noinp{
-	&ser_fatal("");
+	&ser_fatal("(ser_noinp)");
 	&ser_reset;
 #	$button[0][0]->focus;
 };
@@ -1100,7 +1100,7 @@ sub ser_eat {
 	my $foo=scalar(<Client>);
     if(!defined $foo) {
         # show pop up "serial connection lost"
-        &ser_fatal(_("Serielle Verbindung unterbrochen").".");
+        &ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_eat)");
     }
 	print "SER<: <$foo>\n" if($debug);
 	print "got: '$foo'";
