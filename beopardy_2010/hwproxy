@@ -254,7 +254,7 @@ sub session_hw_input {
 	$heap->{socket_wheel}->put("$input\n");
 	say "HARDWARE $device_file (wheel $wheelID): $input";
     } else {
-	say STDERR "HARDWARE $device_file/$wheelID (software not connected!): $input";
+	say STDERR "HARDWARE $device_file (wheel $wheelID; software not connected!): $input";
     }
 
     if($input =~ /^[0-9]+$/) {
