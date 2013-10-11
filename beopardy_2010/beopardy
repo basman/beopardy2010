@@ -152,7 +152,7 @@ my $qwidth=35;					# Width of a question.
 my $catwidth =10;				# Width of categories.
 my $namewidth=10;				# Width of player names
 
-if ($tty){
+sub connect_hwproxy {
 	print "Connecting to hardware proxy\n";
     my $port = 32002;
     my $proto = getprotobyname('tcp');
@@ -160,7 +160,16 @@ if ($tty){
 
     my $iaddr   = inet_aton("localhost");
     my $paddr   = sockaddr_in($port, $iaddr);
-    if(!connect(Client, $paddr)) {
+
+    if(connect(Client, $paddr)) {
+		autoflush Client;
+		return 1;
+	}
+	return 0;
+}
+
+if ($tty){
+    if(!&connect_hwproxy) {
         say "could not connect to hardware proxy: $!" if($debug);
         print "starting hardware proxy...";
         my $hwpid = fork();
@@ -169,7 +178,7 @@ if ($tty){
             my $retry;
             for($retry=200; $retry > 0; $retry--) {
                 sleep(0.4);
-                connect(Client, $paddr) && last;
+                &connect_hwproxy && last;
             }
             if($retry <= 0) {
                 die "failed: $!";
@@ -180,8 +189,7 @@ if ($tty){
             die "exec(./hwproxy) failed: $!";
         }
     }
-	autoflush Client;
-};
+}
 
 my $snd_save; # resume sound..
 if($soundd){
@@ -213,7 +221,7 @@ if($soundd){
         }
     }
 	autoflush Soundd;
-};
+}
 &snd_stop(0); # Just to make sure, and to install snd_eat.
 &mood("boot");
 
@@ -810,6 +818,7 @@ sub ser_answerQuest {
         &ser_en($crap,$c,$f);
 	}else{
 		$key=<Client>;
+        &ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_answerQuest)") unless $key;
 	    print "SER<: <$key>\n" if($debug);
 	};
 	&mood("player $key");
@@ -1019,7 +1028,7 @@ sub ser_reset{
         # called directly
         $reset_command = $crap;
     }
-    if($global_pushbutton == 0 && $reset_command eq 'F') {
+    if($global_pushbutton == 0 && defined $reset_command && $reset_command eq 'F') {
         # 'False' command only valid if a pushbutton has been pressed
         $reset_command = 'R';
     }
@@ -1100,7 +1109,11 @@ sub ser_eat {
 	my $foo=scalar(<Client>);
     if(!defined $foo) {
         # show pop up "serial connection lost"
+		close(Client);
         &ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_eat)");
+		while(!&connect_hwproxy) {
+			sleep(1);
+		}
     }
 	print "SER<: <$foo>\n" if($debug);
 	print "got: '$foo'";
