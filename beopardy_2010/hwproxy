@@ -241,7 +241,6 @@ sub session_software_socket_input {
     $kernel->yield("hw_state_update", $input);
 
     if($emulate) {
-	$heap->{emulator_console}->put("EMULATOR IN: $input");
 	$kernel->yield("emulator_receive", $input);
     }
 }
@@ -364,9 +363,9 @@ sub session_emulator_receive {
 
     if(exists $heap->{socket_wheel}) {
 	$heap->{socket_wheel}->put("$reply\n");
-	say "EMULATOR OUT: $reply";
+	say "EMULATOR: $reply";
     } else {
-	say STDERR "EMULATOR OUT (software not connected!): $reply";
+	say STDERR "EMULATOR (software not connected!): $reply";
     }
 
 }
