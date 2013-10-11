@@ -808,19 +808,24 @@ sub ser_answerQuest {
         &ser_dis;
         print Client "$key\n";
 	    print "SER>: <$key>\n" if($debug);
-		my $ok=<Client>;
-        &ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_answerQuest[dbl])") unless $ok;
-        print "SER<: <$ok>\n" if($debug);
+		my $ok;
+		while(!($ok=<Client>)) {
+			&ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_answerQuest[dbl])");
+			print Client "$key\n";
+			print "SER>: <$key>\n" if($debug);
+		}
+		print "SER<: <$ok>\n" if($debug);
 		$ok=~s/\r?\n//;
 		if ($ok ne "A"){
-            &ser_fatal("ser_answerQuest[dbl] got $ok");
-        }
+			&ser_fatal("ser_answerQuest[dbl] got $ok");
+		}
 		# disabled to improve hardware disconnect robustness
 		#&ser_en($crap,$c,$f);
 	}else{
-		$key=<Client>;
-        &ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_answerQuest)") unless $key;
-	    print "SER<: <$key>\n" if($debug);
+		while(!($key=<Client>)) {
+			&ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_answerQuest)");
+		}
+		print "SER<: <$key>\n" if($debug);
 	};
 	&mood("player $key");
     $global_pushbutton=$key;
@@ -1115,16 +1120,17 @@ sub ser_eat {
 		while(!&connect_hwproxy) {
 			sleep(1);
 		}
-    }
-	print "SER<: <$foo>\n" if($debug);
-	print "got: '$foo'";
-	$foo=~s/\r?\n//;
-	if($foo =~ /^\d+$/){
-		$foo = $players[$foo] ." ". _("ist etwas unruhig")."\n";
-	}else{
-		$foo="Unexpected serial input: '$foo'\n";
-	};
-	${$ref}.=$foo;
+    } else {
+		print "SER<: <$foo>\n" if($debug);
+		print "got: '$foo'";
+		$foo=~s/\r?\n//;
+		if($foo =~ /^\d+$/){
+			$foo = $players[$foo] ." ". _("ist etwas unruhig")."\n";
+		}else{
+			$foo="Unexpected serial input: '$foo'\n";
+		};
+		${$ref}.=$foo;
+	}
 };
 
 #Silently eat anyting...
