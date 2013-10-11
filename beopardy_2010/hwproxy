@@ -19,10 +19,16 @@ use IO::Socket::INET;
 my $port = 32002;
 my @ttypattern = ('/dev/ttyUSB[0-9]*', '/dev/usbserial.*');
 
-my $debug = 0;
-my $help = 0;
+my $debug   = 0;
+my $emulate = 0;
+my $help    = 0;
 
-GetOptions('debug' => \$debug, 'tty' => \@ttypattern, 'help' => \$help) || exit 1;
+GetOptions(
+    'debug|d'   => \$debug,
+    'emulate|e' => \$emulate,
+    'help|h'    => \$help,
+    'tty|t'     => \@ttypattern,
+) || exit 1;
 
 if ($help) {
     help();
@@ -52,6 +58,9 @@ POE::Session->create
 
     hw_state_update  => \&session_hw_state_update,
     hw_state_restore => \&session_hw_state_restore,
+
+    start_emulator   => \&session_start_emulator,
+    emulator_receive => \&session_emulator_receive,
     },
   );
 
@@ -82,7 +91,11 @@ sub session_start {
     @{$heap->{hw_state}} = ();
 
     # look for awailable hardware
-    $kernel->yield("scan_hardware");
+    if($emulate) {
+	$kernel->yield("start_emulator");
+    } else {
+        $kernel->yield("scan_hardware");
+    }
 }
 
 #------------------------------------------------------------------------------
@@ -127,7 +140,7 @@ sub session_hw_found {
     sleep 2;
 
     # create non blocking IO handler
-    my $wheel = 
+    my $wheel =
 	POE::Wheel::ReadWrite->new(
 	    Handle => $fh,
 	    InputEvent => 'hw_input',
@@ -226,6 +239,11 @@ sub session_software_socket_input {
 
     # track button/lamp state
     $kernel->yield("hw_state_update", $input);
+
+    if($emulate) {
+	$heap->{emulator_console}->put("EMULATOR IN: $input");
+	$kernel->yield("emulator_receive", $input);
+    }
 }
 
 #------------------------------------------------------------------------------
@@ -236,7 +254,7 @@ sub session_hw_input {
     $input =~ s/[\r\n]*$//g;
     return if !$input; # ignore empty data
 
-    if($heap->{hw_wheels_mute}{$wheelID} > 0) {
+    if(!$emulate and $heap->{hw_wheels_mute}{$wheelID} > 0) {
 	# special handling during state recovery of freshly connected hardware
 	if($input ne 'A') {
 	    say STDERR "ERROR hardware state recovery: received $input (wheel $wheelID)";
@@ -247,7 +265,7 @@ sub session_hw_input {
 	return;
     }
 
-    my $device_file = $heap->{hw_wheel_files}{$wheelID};
+    my $device_file = $heap->{hw_wheel_files}{$wheelID} || '';
 
     # forward input to beopardy
     if(exists $heap->{socket_wheel}) {
@@ -309,10 +327,55 @@ sub session_stop {
   delete $heap->{socket_wheel};
 }
 
+#------------------------------------------------------------------------------
+# initialise hardware emulator
+sub session_start_emulator {
+    my ($kernel, $heap) = @_[KERNEL, HEAP];
+
+    # set maximum number of players
+    $heap->{emu_players} = 6;
+
+    # setup wheel to watch STDIN
+    my $wheel =
+	POE::Wheel::ReadWrite->new(
+	    InputHandle  => \*STDIN,
+	    OutputHandle => \*STDOUT,
+	    InputEvent => 'hw_input',
+	    #ErrorEvent => 'hw_error',
+	);
+    $heap->{emulator_console} = $wheel;
+
+    say STDERR "emulator started (wheel " . $wheel->ID . ")";
+}
+
+#------------------------------------------------------------------------------
+# received input from beopardy
+sub session_emulator_receive {
+    my ($kernel, $heap, $input) = @_[KERNEL, HEAP, ARG0];
+
+    $input =~ s/[\r\n]*$//g;
+    return if !$input; # ignore empty data
+
+    my $reply = '?';
+    if($input =~ /^[FARON]|\d+$/) {
+	# simple stateless emulation
+	$reply = 'A';
+    }
+
+    if(exists $heap->{socket_wheel}) {
+	$heap->{socket_wheel}->put("$reply\n");
+	say "EMULATOR OUT: $reply";
+    } else {
+	say STDERR "EMULATOR OUT (software not connected!): $reply";
+    }
+
+}
+
 sub help {
-    say "usage: $0 [--help] [--debug] [--tty device1 [--tty device2, ...]]";
-    say "	help	show this help";
+    say "usage: $0 [--help] [--debug] [--emulate|--tty device1 [--tty device2, ...]]";
     say "	debug	enable debug output";
+    say "	emulate emulate hardware (button and lamps controller)";
+    say "	help	show this help";
     say "	tty	specify hardware device file pattern(s)";
 }
 
