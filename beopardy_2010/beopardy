@@ -20,6 +20,7 @@ use FileHandle;
 use Getopt::Std;
 use IO::Handle;
 use Encode;
+use Time::HiRes qw( sleep );
 use open qw( :encoding(UTF-8) :std ); # every opened file is UTF-8
 use utf8;                             # this source code is UTF-8
 
@@ -31,7 +32,6 @@ my $tty=0;						# use tty/serial input?
 my $splash=0;					# Display a splashscreen?
 my $soundd=0;					# Use Soundd-output?
 my $mood=0;						# Publish mood?
-my $socket=0;					# tty emulated by tcp socket?
 my $geometry=0;					# How big should I be?
 my $readfile;					# Should I read from a file?
 my $savefile=0;					# Should I save to a file?
@@ -90,7 +90,6 @@ beopardy -options Gamefile Player1 Player2 ...
 -o		Override. Ignore Windowmanager. (fullscreen)
 -f		Force keyboard focus.           (fullscreen)
 -t		Tty input. Use when Buzzers are connected.
--s		Socket. Emulate Tty input via tcp socket (port 3333)
 -b		Beopardy splashscreen. Default for serial input.
 -r <file>	Read saved game from File.
 -w		Save game progress for reading with -r.
@@ -111,7 +110,6 @@ $debug=1	if (defined $opt{d});
 $override=1	if (defined $opt{o});
 $force=1	if (defined $opt{f});
 $tty=1		if (defined $opt{t});
-$socket=1	if (defined $opt{s});
 $savefile=1	if (defined $opt{w});
 $splash=1	if (defined $opt{b});
 $soundd=1	if (defined $opt{y});
@@ -127,7 +125,6 @@ if($opt{r}){ # Read savefile
 	};
 };
 
-if ($socket){$tty=1};	# socket emulates tty.
 if ($tty){$splash=1};	# tty requires splash.
 if ($readfile){$splash=0};
 
@@ -155,57 +152,76 @@ my $qwidth=35;					# Width of a question.
 my $catwidth =10;				# Width of categories.
 my $namewidth=10;				# Width of player names
 
+sub connect_hwproxy {
+	print "Connecting to hardware proxy\n";
+    my $port = 32002;
+    my $proto = getprotobyname('tcp');
+    socket(Client, PF_INET, SOCK_STREAM, $proto)	|| die "socket: $!";
+
+    my $iaddr   = inet_aton("localhost");
+    my $paddr   = sockaddr_in($port, $iaddr);
+
+    if(connect(Client, $paddr)) {
+		autoflush Client;
+		return 1;
+	}
+	return 0;
+}
+
 if ($tty){
-	print "Opening tty\n";
-	if($socket){
-		my $port = 3333;
-		my $proto = getprotobyname('tcp');
-		socket(Server, PF_INET, SOCK_STREAM, $proto)	|| die "socket: $!";
-		setsockopt(Server, SOL_SOCKET, SO_REUSEADDR, pack("l", 1))
-														|| die "setsockopt: $!";
-		bind(Server, sockaddr_in($port, INADDR_ANY))	|| die "bind: $!" ;
-		listen(Server,SOMAXCONN)						|| die "listen: $!";
-		print "Now connect to port $port...\n";
-		my $paddr = accept(Client,Server);
-		my($iport,$iaddr) = sockaddr_in($paddr);
-		my $name = gethostbyaddr($iaddr,AF_INET);
-		print "connection from $name [", inet_ntoa($iaddr), "] at port $iport\n";
-	}else{
-        # look for arduino buzzer controller through /dev/ttyUSB0..9
-        my $tty_base = "/dev/ttyUSB";
-        my $tty_file = $tty_base;
-        for(my $i=0; $i<10 && ! -e $tty_file; $i++) {
-            $tty_file = "$tty_base$i";
+    if(!&connect_hwproxy) {
+        say "could not connect to hardware proxy: $!" if($debug);
+        print "starting hardware proxy...";
+        my $hwpid = fork();
+        die "could not fork hwproxy: $!" if($hwpid < 0);
+        if($hwpid) {    # parent
+            my $retry;
+            for($retry=200; $retry > 0; $retry--) {
+                sleep(0.4);
+                &connect_hwproxy && last;
+            }
+            if($retry <= 0) {
+                die "failed: $!";
+            }
+            say "connected";
+        } else {        # child
+            exec('./hwproxy');
+            die "exec(./hwproxy) failed: $!";
         }
-        if(!-e $tty_file) {
-            die "serial port ${tty_base}0..9 not found";
-        }
-
-		open(Client, "+<", $tty_file) || die "open: $!";
-		use IO::Stty;
-#		IO::Stty::stty(\*Client,"-crtscts");
-		IO::Stty::stty(\*Client,"9600");
-		IO::Stty::stty(\*Client,"-echo");
-		IO::Stty::stty(\*Client,"-icrnl");
-        print "opened $tty_file\n";
-
-        &ser_startup(); # wait for arduino to become ready
-	};
-	autoflush Client;
-};
+    }
+}
 
 my $snd_save; # resume sound..
 if($soundd){
-		my $port = 32001;
-		my $proto = getprotobyname('tcp');
-		socket(Soundd, PF_INET, SOCK_STREAM, $proto)	|| die "socket: $!";
+	print "Connecting to sound daemon\n";
+    my $port = 32001;
+    my $proto = getprotobyname('tcp');
+    socket(Soundd, PF_INET, SOCK_STREAM, $proto)	|| die "socket: $!";
 
-		my $iaddr   = inet_aton("localhost");
-		my $paddr   = sockaddr_in($port, $iaddr);
-		$proto   = getprotobyname('tcp');
-		connect(Soundd, $paddr)							|| die "connect to sound server failed: $!";
-		autoflush Soundd;
-};
+    my $iaddr   = inet_aton("localhost");
+    my $paddr   = sockaddr_in($port, $iaddr);
+    if(!connect(Soundd, $paddr)) {
+        say "could not connect to sound daemon: $!" if($debug);
+        print "starting sound daemon...";
+        my $soundpid = fork();
+        die "could not fork soundd: $!" if($soundpid < 0);
+        if($soundpid) {    # parent
+            my $retry;
+            for($retry=200; $retry > 0; $retry--) {
+                sleep(0.4);
+                connect(Soundd, $paddr) && last;
+            }
+            if($retry <= 0) {
+                die "failed: $!";
+            }
+            say "connected";
+        } else {        # child
+            exec('./soundd');
+            die "exec(./soundd) failed: $!";
+        }
+    }
+	autoflush Soundd;
+}
 &snd_stop(0); # Just to make sure, and to install snd_eat.
 &mood("boot");
 
@@ -813,17 +829,24 @@ sub ser_answerQuest {
         &ser_dis;
         print Client "$key\n";
 	    print "SER>: <$key>\n" if($debug);
-		my $ok=<Client>;
-        &ser_fatal(_("Serielle Verbindung unterbrochen").".") unless $ok;
-        print "SER<: <$ok>\n" if($debug);
+		my $ok;
+		while(!($ok=<Client>)) {
+			&ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_answerQuest[dbl])");
+			print Client "$key\n";
+			print "SER>: <$key>\n" if($debug);
+		}
+		print "SER<: <$ok>\n" if($debug);
 		$ok=~s/\r?\n//;
 		if ($ok ne "A"){
-            &ser_fatal("ser_reset got $ok");
-        }
-        &ser_en($crap,$c,$f);
+			&ser_fatal("ser_answerQuest[dbl] got $ok");
+		}
+		# disabled to improve hardware disconnect robustness
+		#&ser_en($crap,$c,$f);
 	}else{
-		$key=<Client>;
-	    print "SER<: <$key>\n" if($debug);
+		while(!($key=<Client>)) {
+			&ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_answerQuest)");
+		}
+		print "SER<: <$key>\n" if($debug);
 	};
 	&mood("player $key");
     $global_pushbutton=$key;
@@ -1025,35 +1048,6 @@ sub moveCrsr{
 	return;
 };
 
-sub ser_startup {
-# wait for arduino to become ready
-    my $retry = 8;
-    my $ok = '';
-
-    print "waiting 2 seconds for game controller...";
-    sleep(1);
-    print "done\n";
-    while($ok ne 'A' && $retry-- > 0) {
-        sleep(1);
-        &ser_dis;
-        print Client "R\r\n";
-        Client->flush();
-        print "SER>: R\n" if($debug);
-        $ok=<Client>;
-        if(!$ok) {
-            die("serial communication disrupted");
-        }
-	    print "SER<: <$ok>\n" if($debug);
-		$ok=~s/\r?\n//;
-    }
-
-    if(!$retry) {
-        &ser_fatal("ser_startup failed");
-    } else {
-        print "game controller is responsive.\n";
-    }
-}
-
 sub ser_reset{
     my ($crap, $reset_command) = @_;
     # this sub is used in two different ways: called directly and as callback routine
@@ -1061,7 +1055,7 @@ sub ser_reset{
         # called directly
         $reset_command = $crap;
     }
-    if($global_pushbutton == 0 && $reset_command eq 'F') {
+    if($global_pushbutton == 0 && defined $reset_command && $reset_command eq 'F') {
         # 'False' command only valid if a pushbutton has been pressed
         $reset_command = 'R';
     }
@@ -1084,7 +1078,7 @@ sub ser_reset{
 		Client->flush();
 		print "SER>: $reset_command\n" if($debug);
 		$ok=<Client>;
-		&ser_fatal(_("Serielle Verbindung unterbrochen").".") unless $ok;
+		&ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_reset)") unless $ok;
 		print "SER<: <$ok>\n" if($debug);
 		$ok=~s/\r?\n//;
 		if ($ok ne "A"){
@@ -1109,7 +1103,7 @@ sub ser_reset{
 };
 
 sub ser_noinp{
-	&ser_fatal("");
+	&ser_fatal("(ser_noinp)");
 	&ser_reset;
 #	$button[0][0]->focus;
 };
@@ -1142,17 +1136,22 @@ sub ser_eat {
 	my $foo=scalar(<Client>);
     if(!defined $foo) {
         # show pop up "serial connection lost"
-        &ser_fatal(_("Serielle Verbindung unterbrochen").".");
-    }
-	print "SER<: <$foo>\n" if($debug);
-	print "got: '$foo'";
-	$foo=~s/\r?\n//;
-	if($foo =~ /^\d+$/){
-		$foo = $players[$foo] ." ". _("ist etwas unruhig")."\n";
-	}else{
-		$foo="Unexpected serial input: '$foo'\n";
-	};
-	${$ref}.=$foo;
+		close(Client);
+        &ser_fatal(_("Serielle Verbindung unterbrochen").".\n(ser_eat)");
+		while(!&connect_hwproxy) {
+			sleep(1);
+		}
+    } else {
+		print "SER<: <$foo>\n" if($debug);
+		print "got: '$foo'";
+		$foo=~s/\r?\n//;
+		if($foo =~ /^\d+$/){
+			$foo = $players[$foo] ." ". _("ist etwas unruhig")."\n";
+		}else{
+			$foo="Unexpected serial input: '$foo'\n";
+		};
+		${$ref}.=$foo;
+	}
 };
 
 #Silently eat anyting...
