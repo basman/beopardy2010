@@ -7,7 +7,3 @@
   buttons active, despite the corresponding button should be sent to the
   Client. This is ok, because entering results manually means buttons are not
   used anyway.
-
-- false answer on double jeopardy does not enable all other buttons; in other
-  words: serial commands R,1,F should enable buttons 2,3,4... (testing with raw
-  arduino IDE, they do!)
