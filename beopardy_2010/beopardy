@@ -15,6 +15,7 @@ use Tk::X11Font;
 use Tk::Dialog;
 use Tk::JPEG;
 use Tk::PNG;
+use Tk::Animation;
 use Socket;
 use FileHandle;
 use Getopt::Std;
@@ -256,7 +257,7 @@ sub load_category{
 			}
 		} else {
 			# check referenced media files
-			if ($_ =~ /\[(img|snd):(.*?)\]\s*/){
+			if ($_ =~ /\[(img|snd):(.*?)(,\d+)?\]\s*/){
 				if(! -e "$full_cat_dir/$2" and ! (-e "$full_cat_dir/$2.xpm" and $1 eq 'img')) {
 					die "media file $full_cat_dir/$2 not found (required by $full_cat_dir/q.txt)";
 				}
@@ -735,16 +736,21 @@ sub selectQuest{
 
 # XXX Pixmap-Hack. *funfunfun*
 
-	my ($typ,$fnam);
+	my ($typ,$fnam,$param1);
 	$typ="";
 	print $jdata{$Cat[$c]}[$f]," <-\n" if($debug);
-	if ($jdata{$Cat[$c]}[$f] =~ /^\[(img|snd):(.*?)\]\s*/){
-		$typ=$1;$fnam=$2;
-		print "This is of type $typ - \'$fnam\'\n";
+	if ($jdata{$Cat[$c]}[$f] =~ /^\[(img|snd):(.*?)(?:,(\d+))?\]\s*/){
+		$typ=$1;$fnam=$2;$param1=$3;
+		print "This is of type $typ - \'$fnam\'$param1\n";
 		if($typ eq "img"){
 			if(!defined($imgcache{$fnam})){
 				if(-f $fnam){
-					$imgcache{$fnam} = $tl->Photo($fnam,-file => $fnam);
+					if($fnam =~ /\.gif$/) {
+						$imgcache{$fnam} = $tl->Animation(-format => 'gif','-file' => $fnam);
+						$imgcache{$fnam}->start_animation($param1);
+					} else {
+						$imgcache{$fnam} = $tl->Photo($fnam,-file => $fnam);
+					}
                 }elsif(-f $fnam.".xpm") {
                     # for backwards compatibility to old Jeopardy img format without file suffix
                     $imgcache{$fnam} = $tl->Pixmap($fnam,-file => $fnam.".xpm");
