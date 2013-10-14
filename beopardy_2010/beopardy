@@ -811,7 +811,7 @@ sub selectQuest{
 	if($global_is_dbl){
 		$tl->afterIdle(sub {&ser_answerQuest($tl,$c,$f) if ($tty);});
 	}else{
-        &ser_reset('R');
+        &ser_reset('R') if($tty);
 		$tl->afterIdle(sub {&ser_en($tl,$c,$f) if ($tty);}); # fix Bug#2
 	};
 };
