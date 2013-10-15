@@ -1,5 +1,13 @@
-ubuntu packages:
+required ubuntu packages:
     mplayer
     perl-tk
     libio-stty-perl
     libpoe-perl
+
+how to extract sound from youtube:
+    1. install package libavcodec-extra-53 (ffmpeg supports mp3 encoding)
+	verify with ffmpeg -codecs if encoding of mp3 is possible
+    2. install firefox plugin "Youtube Video and Audio Downloader"
+    3. download desired video
+    4. if integrated audio decoding from plugin fails, use ffmpeg:
+	ffmpeg -i file.mp4 -vn file.mp3
