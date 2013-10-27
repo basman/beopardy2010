@@ -17,6 +17,7 @@ In den Antworten gültige Sonderzeichen: "\n" für Zeilenumbruch.
 [fixed] für den "fixed"-font (für code und ascii-graphik)
 [utf8] für Fragen im utf8-Format (für Kanjis oder andere Sonderzeichen)
 [snd:<name>] oder [img:<name>] für Sound oder Bilderfragen
+     Sound-Auszüge: [snd:<name>,N,M] N: Beginn, M: Dauer (im mplayer format)
 
 [NOTE] Wenn kein \n vorkommt, versucht beopardy selbst sinnvoll
        Zeilenumbrüche einzustreuen.

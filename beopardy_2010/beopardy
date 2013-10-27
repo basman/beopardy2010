@@ -257,7 +257,7 @@ sub load_category{
 			}
 		} else {
 			# check referenced media files
-			if ($_ =~ /\[(img|snd):(.*?)(,[\d:]+)?(,[\d:]+)?\]/){
+			if ($_ =~ /\[(img|snd):(.*?)(,[\d:.]+)?(,[\d:.]+)?\]/){
 				if(! -e "$full_cat_dir/$2" and ! (-e "$full_cat_dir/$2.xpm" and $1 eq 'img')) {
 					die "media file $full_cat_dir/$2 not found (required by $full_cat_dir/q.txt)";
 				}
@@ -739,7 +739,7 @@ sub selectQuest{
 	my ($typ,$fnam,$param1,$param2);
 	$typ="";
 	print $jdata{$Cat[$c]}[$f]," <-\n" if($debug);
-	if ($jdata{$Cat[$c]}[$f] =~ /^\[(img|snd):(.*?)(?:,([\d:]+))?(?:,([\d:]+))?\]/){
+	if ($jdata{$Cat[$c]}[$f] =~ /^\[(img|snd):(.*?)(?:,([\d:.]+))?(?:,([\d:.]+))?\]/){
 		$typ=$1;$fnam=$2;$param1=$3;$param2=$4;
 		print "This is of type $typ - \'$fnam\'$param1\n";
 	}
