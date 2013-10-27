@@ -3,11 +3,16 @@
 
 use strict;
 use POSIX;
+use Getopt::Long;
 
 $|=1;
 
 use POE qw(Wheel::SocketFactory Wheel::ReadWrite Driver::SysRW Filter::Stream Wheel::Run);
 use IO::Socket::INET;
+
+my $debug  = 0;
+my $single = 0;
+my $help   = 0;
 
 my $mood=0;
 my $moodip=inet_aton("10.0.0.9");
@@ -55,7 +60,7 @@ sub session_start {
 sub session_connect_success {
   my ($heap, $kernel, $connected_socket) = @_[HEAP, KERNEL, ARG0];
 
-#delete $heap->{connector}; # No new connections(?)
+  delete $heap->{connector} if($single); # No new connections
 
   $heap->{socket_wheel} = POE::Wheel::ReadWrite->new
     ( Handle => $connected_socket,
@@ -138,14 +143,14 @@ sub session_run_close {
 
 sub session_socket_input {
 	my ($kernel, $heap, $input) = @_[KERNEL, HEAP, ARG0];
-#	print("Socket: <$input>\n");
+	print("Socket: <$input>\n") if $debug;
 
 	my $command;
 	while($input=~s/(.*?)[\r\n]+//){
 		$command=$1;
 		print "Parsing <$command>\n";
 		if ($command =~ s/^P //i){
-	#		print "-> Play $command\n";
+			print "-> Play $command\n" if $debug;
 			delete $heap->{silent};
 			if($heap->{run_wheel}){
 				print ("...with kill()\n");
@@ -274,9 +279,30 @@ sub session_socket_error {
   };
 }
 
+
+sub usage {
+    print <<"EOF";
+usage: $0 [--debug] [--help] [--single]
+    --debug	show debug messages
+    --help	show this text
+    --single	accept only one connection
+EOF
+;
+}
+
 #==============================================================================
 # Start the Session, which will fire off the _start event and begin
 # the connection.
+
+if(! GetOptions ("debug"  => \$debug,
+                 "single" => \$single,
+		 "help"   => \$help)) {
+    exit 1;
+}
+if($help) {
+    usage();
+    exit(0);
+}
 
 POE::Session->create
   ( 
