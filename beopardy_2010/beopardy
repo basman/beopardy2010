@@ -339,7 +339,7 @@ if ($#ARGV>0){
 };
 
 
-my @colors=qw(darkgrey darkred darkgreen darkblue darkcyan yellow blue);
+my @colors=qw(darkgrey darkred darkgreen darkblue darkcyan blue yellow);
 
 unshift @players,"Nobody";
 my @points;
