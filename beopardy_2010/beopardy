@@ -1016,6 +1016,7 @@ sub answerQuest{
 			    $crap->destroy;
 			    $button[$c][$f]->focusForce if ($force);
             } elsif($sgn==0) {
+                # FIXME dead code? ($sgn is never 0)
                 &ser_reset('N') if($tty);
             } elsif($sgn<0) {
 			    &ser_reset('F') if($tty);
