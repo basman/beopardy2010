@@ -1,3 +1,5 @@
+- abort question after every player gave wrong answer
+
 - save/restore button states in/from save file
 - one second delay between question display and button activation
 - 1 second penalty if button pressed before activation
