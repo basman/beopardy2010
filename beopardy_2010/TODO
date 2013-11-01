@@ -1,3 +1,6 @@
+- during double jeopardy sound wont start ('R' key required)
+- restarting sound ignores time spec
+- abort sound question if playback is finished
 - abort question after every player gave wrong answer
 
 - save/restore button states in/from save file
