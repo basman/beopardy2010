@@ -857,7 +857,7 @@ sub ser_answerQuest {
 	&mood("player $key");
     $global_pushbutton=$key;
 
-	&snd_stop if($snd_save);
+	&snd_stop() if($snd_save && !$global_is_dbl);
 
 	$key=~s/\r?\n$//;
 
