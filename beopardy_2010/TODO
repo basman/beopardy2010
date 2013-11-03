@@ -1,4 +1,3 @@
-- abort sound question if playback is finished
 - abort question after every player gave wrong answer
 
 - save/restore button states in/from save file
