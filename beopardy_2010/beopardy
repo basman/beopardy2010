@@ -148,7 +148,7 @@ if (defined $opt{g}){
 	};
 }
 
-my $q=5;						# Wieviele Fragen/Kategorie?
+my $q;							# Wieviele Fragen/Kategorie?
 my $qwidth=35;					# Width of a question.
 my $catwidth =10;				# Width of categories.
 my $namewidth=10;				# Width of player names
@@ -281,7 +281,6 @@ sub load_category{
 
 sub read_game{
 	my @Cat;			# Namen der Kategorien
-	my $q=shift;		# Wieviele Fragen/Kategorie?
 	my $gamefile=shift(@ARGV)||"Test.jg";
 	$gamefile .= ".jg" if ( -f $gamefile.".jg" );
 	$gamefile =~ /^([^.]+)(.jg)?/;
@@ -296,24 +295,27 @@ sub read_game{
 	};
 	close(G);
 
-	my $p=0;
+	# load categories
+	my $min_question_count = 0;
 	for (@Cat){
 		my $real_category_name = load_category($_, $gamefile);
 		$_ = $real_category_name;
-		printf "%-20s:%2d\n",$_,$#{$jdata{$_}} if ($debug);
-		if ($#{$jdata{$_}} < $q){
-			print "ERROR: not enough questions in \"$_\"\n";
-			$p++;
-		};
-		if ($#{$jdata{$_}} > $q){
-			print "WARN : too many questions in \"$_\"\n";
-#			$p++;
-		};
-	};
-	if ($p){
-		print "Hit enter to continue...\n";
-		$p=<STDIN>;
-	};
+		my $question_count = $#{$jdata{$_}};
+		if(!$min_question_count || $question_count < $min_question_count) {
+			$min_question_count = $question_count;
+		}
+	}
+	$q = $min_question_count;
+
+	# drop questions exceeding the minimum count across all categories
+	for (@Cat){
+		if($#{$jdata{$_}} > $min_question_count) {
+			printf "%-20s:%2d [reduced to %2d]\n",$_,$#{$jdata{$_}},$min_question_count if ($debug);
+			splice(@{$jdata{$_}}, $min_question_count+1);
+		} else {
+			printf "%-20s:%2d\n",$_,$#{$jdata{$_}} if ($debug);
+		}
+	}
 
 	if($savefile){
 		my($ts)=logname();
@@ -328,8 +330,8 @@ sub read_game{
 };
 
 # Titel und Fragen
-my ($title,@Cat)=&read_game($q);
-print "Totalling ",(scalar keys %jdata)," categories.\n";
+my ($title,@Cat)=&read_game;
+print "Totalling ",(scalar keys %jdata)," categories, with $q questions per category.\n";
 
 my @players;
 if ($#ARGV>0){
