@@ -131,7 +131,7 @@ if ($readfile){$splash=0};
 
 my $tl = MainWindow -> new -> toplevel;
 $tl->appname(beopardy);
-$tl->bind('<M>',sub{ snd_play("start"); });
+$tl->bind('<Control-Key-m>',sub{ snd_play("start"); });
 my ($width,$height)=($tl->screenwidth,$tl->screenheight);	# Size of game field.
 
 if (defined $opt{g}){
@@ -547,7 +547,7 @@ if($splash){ # Splash-Screen
 	$dlg->overrideredirect(1);
 	my $q=$dlg->Label(qw/-relief raised -width 80/)->pack;
 
-	$dlg->bind('<M>',sub{
+	$dlg->bind('<Control-Key-m>',sub{
 		snd_play("start");
 	});
 	$i= $q->Pixmap("beopardy",-file => "img/beopardy.xpm");
