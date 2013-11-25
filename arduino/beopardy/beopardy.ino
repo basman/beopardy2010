@@ -54,14 +54,28 @@ int debounceCounters[PLAYERS]; // debounce counters for each button
 unsigned char suppressedButtons;     // bitmask that indicates suppressed buttons (player gave wrong answer)
 
 // these arrays control the lamp flickering
-// TODO control transition speed
-const unsigned short lampHold[]  = {  50, 100,  50, 100,  50, 100,  50, 100, 400, 2500 }; // unit: ms
-const unsigned char lampValues[] = { 255,  10, 255,  10, 255,  10, 255,  10, 255,    0 }; // PWM duty cycle between 0 and 255
-#define ANIM_STEPS sizeof(lampHold)/sizeof(lampHold[0])
-#define ANOM_LOOP_IDX 8 // repeat animation at this element index
+typedef struct struct_flash {
+    unsigned short repetitions;      // how many flashes
+    unsigned short attack_decay;     // attach and decay rate in ms
+    unsigned short on_duration;      // hold duration in ms
+    unsigned short off_duration;     // pause before next repetition in ms
+} t_flash;
 
-int lampProgressIdx[PLAYERS];
-int lampPauses[PLAYERS];
+const t_flash flashes[] = {
+  { 10, 10, 25, 20 }, // 20 quick flashes
+  {  1, 0, 0, 500 },  // 500 ms pause
+  { 10, 10, 25, 20 }, // 20 quick flashes
+  {  1, 0, 0, 500 },  // 500 ms pause
+  { 10, 10, 25, 20 }, // 20 quick flashes
+  {  1, 0, 0, 500 },  // 500 ms pause
+  {  4, 500, 500, 600 } // 4 gentle faded flashes
+};
+#define FLASH_N sizeof(flashes)/sizeof(flashes[0])
+#define LOOP_IDX 2
+
+int lampSequenceIdx[PLAYERS];  // index to flash sequence
+int lampRepetition[PLAYERS];   // sequence repetition counter
+int lampProgress[PLAYERS];     // sub-sub-index to progress of flash phase
 
 
 void setup() {
@@ -107,9 +121,10 @@ int bitmask2button(int bitmask) {
 
 void resetLamps() {
   for(int i=0; i<PLAYERS; i++) {
-    digitalWrite(lampPins[i], LOW);  // switch off all lamps
-    lampProgressIdx[i] = 0;          // reset animation state
-    lampPauses[i] = 0;               // initialize animation pause
+    digitalWrite(lampPins[i], LOW); // switch off all lamps
+    lampSequenceIdx[i] = 0;         // reset animation state
+    lampRepetition[i]  = 0;
+    lampProgress[i]    = 0;
   }
 }
 
@@ -246,7 +261,7 @@ void receiveCommand() {
   Serial.flush();  // this waits until all data has been transmitted (it does not discard incoming data)
 }
 
-// two quick fade-in/fade-out flashes
+// advance lamp animation by one step (= 1 ms)
 void animateLamps() {
   static unsigned long lastStep = 0;
 
@@ -260,20 +275,52 @@ void animateLamps() {
      if((suppressedButtons & (1<<i)) != 0)
          continue;
 
-     if(lampPauses[i] > 0) {
-         lampPauses[i]--;
+     // advance lampProgress through the phases (attack, hold, decay, pause)
+     lampProgress[i]++;
+     const t_flash *f = &flashes[lampSequenceIdx[i]];
+
+     unsigned char brightness = 0;
+
+     // find flash phase
+     if(lampProgress[i] <= f->attack_decay) {
+        // attack phase (fade in)
+        float ratio = 255.0 * lampProgress[i] / f->attack_decay;
+        brightness = (unsigned char)ratio;
+
+     } else if(lampProgress[i] <= f->attack_decay
+                                + f->on_duration) {
+        // on phase
+        brightness = 255;
+
+     } else if(lampProgress[i] <= f->attack_decay
+                                + f->on_duration
+                                + f->attack_decay) {
+        // decay phase (fade out)
+        float ratio = 255.0 * (f->attack_decay - (lampProgress[i] - f->attack_decay - f->on_duration)) / f->attack_decay;
+        brightness = (unsigned char)ratio;
+
+     } else if(lampProgress[i] <= f->attack_decay
+                                + f->on_duration
+                                + f->attack_decay
+                                + f->off_duration) {
+        // off phase (rest dark until next repetition)
+        brightness = 0;
 
      } else {
-        // advance to next animation element
-        lampProgressIdx[i] += 1;
-        if(lampProgressIdx[i] >= ANIM_STEPS) {
-          lampProgressIdx[i] = ANOM_LOOP_IDX - 1;
-          lampPauses[i] = random(10,400); // make lamps divert (after one animation completed)
-        } else {
-            analogWrite(lampPins[i], lampValues[lampProgressIdx[i]]);
-            lampPauses[i] = lampHold[lampProgressIdx[i]];
+        // next repetition
+        lampProgress[i] = 0;
+        lampRepetition[i]++;
+        if(lampRepetition[i] >= f->repetitions) {
+            lampRepetition[i] = 0;
+            lampSequenceIdx[i]++;
+            if(lampSequenceIdx[i] >= FLASH_N) {
+                lampSequenceIdx[i] = LOOP_IDX;
+            }
         }
-    }
+     }
+
+     // send current brightness to lamp
+     analogWrite(lampPins[i], brightness);
   }
 }
 
