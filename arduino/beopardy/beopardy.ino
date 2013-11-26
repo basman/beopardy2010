@@ -61,17 +61,37 @@ typedef struct struct_flash {
     unsigned short off_duration;     // pause before next repetition in ms
 } t_flash;
 
-const t_flash flashes[] = {
-  { 10, 10, 25, 20 }, // 20 quick flashes
-  {  1, 0, 0, 500 },  // 500 ms pause
-  { 10, 10, 25, 20 }, // 20 quick flashes
-  {  1, 0, 0, 500 },  // 500 ms pause
-  { 10, 10, 25, 20 }, // 20 quick flashes
-  {  1, 0, 0, 500 },  // 500 ms pause
-  {  4, 500, 500, 600 } // 4 gentle faded flashes
+const t_flash flashes_odd[] = {
+  { 12, 5, 20, 20 }, // 20 quick flashes
+  {  1, 0, 0, 300 },  // 500 ms pause
+  { 12, 5, 20, 20 }, // 20 quick flashes
+  {  1, 0, 0, 300 },  // 500 ms pause
+  { 12, 5, 20, 20 }, // 20 quick flashes
+  {  1, 0, 0, 300 },  // 500 ms pause
+  {  3, 500, 500, 600 } // 4 gentle faded flashes
 };
-#define FLASH_N sizeof(flashes)/sizeof(flashes[0])
-#define LOOP_IDX 2
+const t_flash flashes_even[] = {
+  { 12, 5, 20, 20 }, // 20 quick flashes
+  {  1, 0, 0, 300 },  // 500 ms pause
+  { 12, 5, 20, 20 }, // 20 quick flashes
+  {  1, 0, 0, 300 },  // 500 ms pause
+  { 12, 5, 20, 20 }, // 20 quick flashes
+  {  1, 0, 0, 300 },  // 500 ms pause
+  {  2, 500, 500, 600 }, // 4 gentle faded flashes
+  {  3, 500, 500, 600 }, // 4 gentle faded flashes
+  { 12, 5, 20, 20 }, // 20 quick flashes
+  {  1, 0, 0, 300 },  // 500 ms pause
+  { 12, 5, 20, 20 }, // 20 quick flashes
+  {  1, 0, 0, 300 }  // 500 ms pause
+};
+
+const t_flash *flash_controls[2] = { flashes_even, flashes_odd };
+
+#define FLASH_N_ODD sizeof(flashes_odd)/sizeof(flashes_odd[0])
+#define FLASH_N_EVEN sizeof(flashes_even)/sizeof(flashes_even[0])
+#define LOOP_IDX_ODD 2
+#define LOOP_IDX_EVEN 7
+
 
 int lampSequenceIdx[PLAYERS];  // index to flash sequence
 int lampRepetition[PLAYERS];   // sequence repetition counter
@@ -277,7 +297,7 @@ void animateLamps() {
 
      // advance lampProgress through the phases (attack, hold, decay, pause)
      lampProgress[i]++;
-     const t_flash *f = &flashes[lampSequenceIdx[i]];
+     const t_flash *f = &flash_controls[i%2][lampSequenceIdx[i]];
 
      unsigned char brightness = 0;
 
@@ -313,8 +333,10 @@ void animateLamps() {
         if(lampRepetition[i] >= f->repetitions) {
             lampRepetition[i] = 0;
             lampSequenceIdx[i]++;
-            if(lampSequenceIdx[i] >= FLASH_N) {
-                lampSequenceIdx[i] = LOOP_IDX;
+            if(i%2 == 0 && lampSequenceIdx[i] >= FLASH_N_EVEN) {
+                lampSequenceIdx[i] = LOOP_IDX_EVEN;
+            } else if(i%2 != 0 && lampSequenceIdx[i] >= FLASH_N_ODD) {
+                lampSequenceIdx[i] = LOOP_IDX_ODD;
             }
         }
      }
