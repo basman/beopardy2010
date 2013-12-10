@@ -1185,6 +1185,7 @@ sub enterdbl {
 
 	my $ich=$crap->Toplevel;
 
+	$global_question_inhibit=1;
 	$global_dbl_maxamt=100*$f*2;
 	$global_dbl_amt=100*$f;
 
@@ -1192,6 +1193,12 @@ sub enterdbl {
 	$ich->resizable(0,0);
 	$ich->geometry("-0-0");
 
+	$ich->protocol('WM_DELETE_WINDOW' => sub {
+		# cleanup if user aborts this dialog
+		$global_question_inhibit=0;
+		$global_is_dbl=0;
+		$ich->destroy;
+	});
 
 	my $ftl = $ich->Frame( -relief => 'ridge', -bd => 4)->pack;
 	my $ttl=$ftl->Label(
@@ -1223,7 +1230,8 @@ sub enterdbl {
 			-text		=> _('Ok'),
 			-command	=> sub{
                                 if($global_dbl_ply) {
-    							    &selectQuest($crap,$c,$f,$ich);
+									$global_question_inhibit=0;
+									&selectQuest($crap,$c,$f,$ich);
                                 } else {
                                     print "WARN: can't begin double jeopardy question with no choosen player\n";
                                 }
