@@ -1,7 +1,7 @@
 # vim :set fileencoding=utf-8
 >Anagram
 sroGs
-nlKie
+[dbl]nlKie
 [img:q300.jpg]
 ünDn
 mocKsih

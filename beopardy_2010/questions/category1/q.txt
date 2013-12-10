@@ -1,7 +1,7 @@
 # vim :set fileencoding=utf-8
 >Erben
 Recht
-Knecht
+[dbl]Knecht
 Boss
 Frist
 Anteil
