@@ -541,6 +541,7 @@ if($splash){ # Splash-Screen
 	my $i;
 	my $rframe;
 
+	$global_question_inhibit=1;
 #	$dlg->configure(-height => $height, -width => $width);
 #	$dlg->resizable(0,0);
 #	$dlg->packPropagate(0);	# Keep the size.
@@ -590,7 +591,7 @@ if($splash){ # Splash-Screen
 			-font	=> $qfont,
 #			-width	=> 30,
 			-height	=> 2,
-			-command	=> sub {$splash=0;&snd_stop;&ser_reset('N') if($tty);$button[0][1]->focus; $button[0][1]->focusForce if ($force);&mood("start");$dlg->destroy;
+			-command	=> sub {$global_question_inhibit=0;$splash=0;&snd_stop;&ser_reset('N') if($tty);$button[0][1]->focus; $button[0][1]->focusForce if ($force);&mood("start");$dlg->destroy;
 			print SAV "[ply] ",join("/",@players),"\n";
 			},
 	)->pack(
