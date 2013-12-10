@@ -904,6 +904,7 @@ sub ser_answerQuest {
 	my $bo=$bframe->Button(
 			-text		=> _('Oops'),
 			-command	=> sub{$ich->destroy;
+							  $global_is_dbl=0;
 							  &ser_reset('O');
 #							  &snd_stop;
 							  &mood("question");
