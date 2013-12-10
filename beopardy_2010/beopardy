@@ -714,7 +714,7 @@ sub selectQuest{
     $wrong_answers = 0;
 	print "Q$f / \"$Cat[$c]\":\n$jdata{$Cat[$c]}[$f]\n";
 
-	if( $jdata{$Cat[$c]}[$f] =~ s/\s*\[dbl\]\s*// && $global_is_dbl == 0){
+	if( $jdata{$Cat[$c]}[$f] =~ /\s*\[dbl\]\s*/ && $global_is_dbl == 0){
 		$global_is_dbl=1;
 		&enterdbl;
 		return;
@@ -745,7 +745,7 @@ sub selectQuest{
 	my ($typ,$fnam,$param1,$param2);
 	$typ="";
 	print $jdata{$Cat[$c]}[$f]," <-\n" if($debug);
-	if ($jdata{$Cat[$c]}[$f] =~ /^\[(img|snd):(.*?)(?:,([\d:.]+))?(?:,([\d:.]+))?\]/){
+	if ($jdata{$Cat[$c]}[$f] =~ /\[(img|snd):(.*?)(?:,([\d:.]+))?(?:,([\d:.]+))?\]/){
 		$typ=$1;$fnam=$2;$param1=$3;$param2=$4;
 		print "This is of type $typ - \'$fnam\' $param1 $param2\n";
 	}
@@ -778,11 +778,12 @@ sub selectQuest{
 		);
 	}else{
 		my $txt=$jdata{$Cat[$c]}[$f];
+		$txt =~ s/\[dbl\]//;
 		my $magicfont=$qfont;
-		if ($txt =~ s/^\[fixed\]//){
+		if ($txt =~ s/\[fixed\]//){
 			$magicfont=$fixedfont;
 		};
-		if ($txt =~ s/^\[utf8\]//){
+		if ($txt =~ s/\[utf8\]//){
 			$txt=Encode::decode_utf8($txt);
 		};
 		if(defined($fnam)&&($typ eq "snd")){
@@ -790,12 +791,12 @@ sub selectQuest{
 			&snd_play($fnam,$param1,$param2);
 			$snd_save=[$fnam,$param1,$param2];
 		};
-		if($txt=~s/^\[snd:.*?\]\s*//){
+		if($txt=~s/\[snd:.*?\]\s*//){
 			if(!$txt){
 				$txt=_("Zuhören...");
 			};
 		};
-		if($txt=~s/^\[img:.*?\]\s*//){
+		if($txt=~s/\[img:.*?\]\s*//){
 			if(!$txt){
 				$txt=_("[ERR:Noimg]");
 			};
