@@ -1,0 +1,32 @@
+Requirements für das neue GUI der beopardy:
+
+- Das GUI ist eine standalone Applikation, also ein ausführbares File. Kein
+  Webserver/Client etc. Dadurch ist das Neustarten während des Spiels eindeutig 
+  definiert (keine Frage nach "hängt jetzt der Browser oder der Server").
+
+- Sämtliche Änderungen des Punktestands werden mitgeschrieben und das Log
+  File kann beim Starten eingelesen werden, um den Spielstand 
+  wiederherzustellen. Ob der Splashscreen noch angezeigt wird und welche Namen der
+  Spieler eingegeben wurden, ist auch im Logfile abgelegt.
+  Am besten wird beim Starten gefragt, ob der existierende Spielstand wiederhergestellt
+  werden soll. Spielstanddateien können Kommentare (#) enthalten. Jede Transaktion sollte
+  eine Zeile im Spielstand sein, so das man mittels auskommentieren und editieren im
+  simplen Texteditor manipulieren kann.
+
+- Fileformat der Fragen bleibt gleich: Die Fragen sind in blanken Textfiles
+  und Directories abgelegt. Keine Datenbank oder sonstwelche Binärformate.
+
+- Die Kommunikation mit der Hardware erfolgt über den hwproxy mittels TCP port 32002 localhost. hwproxy unterstützt dieselben Befehle wie der Arduino selbst. Siehe RTFM.serial
+- Sounds werden über TCP port 32001 abgespielt (sieht RTFM.soundd)
+
+- Das GUI läuft auf Linux und ist ressourcensparend (CPU & RAM). 
+- Das GUI ist snappy: z.B. ein Klick auf ein Fragefeld öffnet das Fragefenster
+  schnell. Das verhindert allerdings den Gebrauch von atemberaubenden Effekten.
+
+- Optional: Video-Fragen (bisher von beopardy nicht unterstützt)
+
+- Das Richtig/Falsch/Oops pop-up ist nicht nötig, sondern kann in die Statuszeile integriert
+  werden, wo mit Hotkeys (siehe next item) oder Maus bestimmt werden kann, ob die Antwort
+  korrekt war.
+- Die Hotkeys bleiben weitgehend gleich. Richtig und Falsch sollen neuerdings per
+  Hotkey eingegeben werden können.
